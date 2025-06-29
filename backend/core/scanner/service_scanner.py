@@ -7,7 +7,7 @@ def service_scan(target, open_ports):
     # for tcp ports
     tcp_ports = [str(p['port']) for p in open_ports if p['protocol'] == 'tcp']
     if tcp_ports:
-        ports_str = ','.join(tcp_ports)
+        ports_str = ','.join(tcp_ports) # so that it can be passed to nmap
         print(f"[+] Running service detection on TCP ports: {ports_str}")
         scan_result = scanner.scan(target, ports_str, arguments='-sV -Pn -T4')
         if 'scan' in scan_result and target in scan_result['scan']:
@@ -28,10 +28,15 @@ def service_scan(target, open_ports):
 
     # udp ports do only if there are any
     udp_ports = [str(p['port']) for p in open_ports if p['protocol'] == 'udp']
+    # print(udp_ports)
     if udp_ports:
         ports_str = ','.join(udp_ports)
         print(f"[+] Running UDP service detection on ports: {ports_str} (slow & limited)")
         scan_result = scanner.scan(target, ports_str, arguments='-sU -sV -Pn -T4')
+
+        # import json
+        # print(json.dumps(scan_result, indent=2))
+
         if 'scan' in scan_result and target in scan_result['scan']:
             udp_section = scan_result['scan'][target].get('udp', {})
             for port, port_data in udp_section.items():
