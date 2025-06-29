@@ -11,6 +11,11 @@ def test_parser_returns_list():
             {
                 'type': 'tcp_connect',
                 'result': {
+                    'nmap': {
+                        'scaninfo': {
+                            'tcp': {'method': 'connect', 'services': '22'}
+                        }
+                    },
                     'scan': {
                         '127.0.0.1': {
                             'tcp': {
