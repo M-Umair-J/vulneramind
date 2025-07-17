@@ -61,42 +61,44 @@ def service_scan(target, open_ports):
     scanner = PortScanner()
     final_output = []
 
-    # ========== TCP Scan with OS Detection ==========
+    # running TCP scan on the open ports along with OS detection
     tcp_ports = [str(p['port']) for p in open_ports if p['protocol'] == 'tcp']
     if tcp_ports:
         ports_str = ','.join(tcp_ports)
-        print(f"[+] Running service detection on TCP ports: {ports_str}")
+        print(f"-> Running service detection on TCP ports: {ports_str}")
 
-        scan_result = scanner.scan(target, ports_str, arguments='-sV -O -Pn -T4')  # -O for OS fingerprinting
-
+        # scan_result = scanner.scan(target, ports_str, arguments='-sV -Pn -T4')
+        scan_result = scanner.scan(target, ports_str, arguments='-sV -Pn -T5 --version-intensity 2 --max-rtt-timeout 500ms')  # Much faster scanning
         if 'scan' in scan_result and target in scan_result['scan']:
             target_data = scan_result['scan'][target]
 
-            # Extract TCP service info
+            # extract TCP service info
             tcp_section = target_data.get('tcp', {})
             for port, port_data in tcp_section.items():
                 service = port_data.get('name', '')
                 product = port_data.get('product', '')
                 version = port_data.get('version', '')
-                full_version = f"{product} {version}".strip() if product else version
+
+                # displaying the service info
+                print(f"Port {port}: service='{service}', product='{product}', version='{version}'")
 
                 final_output.append({
                     'port': port,
                     'protocol': 'tcp',
                     'service': service,
                     'product': product,
-                    'version': full_version
+                    'version': version  # keep version separate, not combined
                 })
 
-            # Extract OS info if available
+            # extract OS info if available
             os_matches = target_data.get('osmatch', [])
 
-            # ✅ Logging OS fingerprinting status
+            #  log OS fingerprinting status
             if os_matches:
                 os_name = os_matches[0].get('name', 'Unknown')
-                print(f"[+] OS fingerprinting successful: {os_name}")
+                print(f"-> OS fingerprinting successful: {os_name}")
             else:
-                print("[!] OS fingerprinting failed or inconclusive.")
+                print("! OS fingerprinting failed or inconclusive.")
 
             if os_matches:
                 best_guess = os_matches[0]
@@ -107,10 +109,10 @@ def service_scan(target, open_ports):
                     for os_class in os_classes:
                         cpe = os_class.get('cpe')
                         if cpe:
-                            os_cpe = cpe[0]  # Pick the first matching CPE
+                            os_cpe = cpe[0]  # pick the first matching CPE
                             break
 
-                # Inject OS info as a special entry (pseudo port = "OS")
+                # enter the OS info as a special entry in the ports list
                 final_output.append({
                     'port': 'OS',
                     'protocol': 'os',
@@ -120,11 +122,11 @@ def service_scan(target, open_ports):
                     'cpe': os_cpe
                 })
 
-    # ========== UDP Scan ==========
+    # running UDP scan for services on open ports
     udp_ports = [str(p['port']) for p in open_ports if p['protocol'] == 'udp']
     if udp_ports:
         ports_str = ','.join(udp_ports)
-        print(f"[+] Running UDP service detection on ports: {ports_str} (slow & limited)")
+        print(f"-> Running UDP service detection on ports: {ports_str}")
         scan_result = scanner.scan(target, ports_str, arguments='-sU -sV -Pn -T4')
 
         if 'scan' in scan_result and target in scan_result['scan']:
@@ -144,4 +146,3 @@ def service_scan(target, open_ports):
                 })
 
     return final_output
-

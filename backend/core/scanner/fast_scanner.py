@@ -15,13 +15,16 @@ def port_scan(target, ports = '1-1024'):# default ports 1-1024 will be scanned i
     results = {'target': target, 'ports': []}
 
     if check_if_user_is_root_or_admin():
-        tcp_scan = scanner.scan(target, ports,arguments = '-sS -T3 -Pn') # running a stealth tcp scan
+        # tcp_scan = scanner.scan(target, ports,arguments = '-sS -T3 -Pn') # running a stealth tcp scan
+        tcp_scan = scanner.scan(target, ports,arguments = '-sS -T5 -Pn --max-rtt-timeout 300ms') # faster stealth tcp scan
         results['ports'].append({"type": "stealth_tcp", "result": tcp_scan})
 
-        udp_scan = scanner.scan(target, ports, arguments = '-sU -T5 -Pn') # running a udp scan
+        # udp_scan = scanner.scan(target, ports, arguments = '-sU -T5 -Pn') # running a udp scan
+        udp_scan = scanner.scan(target, ports, arguments = '-sU -T5 -Pn --max-rtt-timeout 500ms') # faster udp scan
         results['ports'].append({"type": "udp", "result": udp_scan})
     else:
-        tcp_scan = scanner.scan(target, ports, arguments = '-sT -T3 -Pn') # running a tcp connect scan
+        # tcp_scan = scanner.scan(target, ports, arguments = '-sT -T3 -Pn') # running a tcp connect scan
+        tcp_scan = scanner.scan(target, ports, arguments = '-sT -T5 -Pn --max-rtt-timeout 300ms') # faster tcp connect scan
         results['ports'].append({"type": "tcp_connect", "result": tcp_scan})
     # print(results)
     return results

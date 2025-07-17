@@ -1,4 +1,52 @@
-openai>=1.0.0
-python-nmap>=0.7.0
-requests>=2.31.0
-pytest>=7.0
+# core dependencies: network scanning and analysis
+python-nmap>=0.7.0              # Network scanning and service detection
+requests>=2.31.0                # HTTP client for NVD API calls
+
+# AI and language models
+openai>=1.0.0                   # OpenAI API integration (not right now) so not really needed for current testing
+
+# system integration and environment
+pathlib2>=2.3.6                # maybe already included in Python 3.4+ but for compatibility
+
+# development and testing tools
+pytest>=7.0                    # unit testing framework
+pytest-cov>=4.0.0              # code coverage analysis
+black>=22.0.0                   # code formatting and style
+flake8>=5.0.0                   # code linting and quality checks
+
+# NOTE: DON'T NEED THE TESTING TOOLS IF YOU ARE NOT WRITTING TEST CASES ALONG WITH THE CODE, I DID FOR EARLY CODE BUT NOT NEEDED FOR FUNCTIONALITY
+
+
+
+# System Dependencies (must be installed separately via package manager):
+# Core Security Tools:
+# - nmap                        # network scanning engine
+# - netcat-traditional (nc)     # network listener and shell management
+# - exploitdb                   # vulnerability and exploit database
+
+# Development Tools: ( reuired for exploit development)
+# - gcc/build-essential         # C compiler for exploit compilation
+# - perl                        # Perl interpreter for .pl exploits
+# - ruby                        # Ruby interpreter for Metasploit modules
+# - bash/sh                     # Shell interpreters for script execution
+
+# Installation Commands by OS:
+# ===========================
+#
+# Ubuntu/Debian:
+# sudo apt-get update
+# sudo apt-get install nmap netcat-traditional exploitdb gcc build-essential perl ruby
+# sudo searchsploit -u
+
+# Windows (WSL recommended):
+# Install via Windows Subsystem for Linux (WSL2) with Ubuntu
+# Then follow Ubuntu installation commands above
+
+
+# Python Version Requirements:
+# Tested on: Python 3.12
+
+# Virtual Environment Setup:
+# python3 -m venv .venv
+# source .venv/bin/activate  linux
+# .venv\Scripts\activate     windows
