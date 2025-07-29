@@ -1,5 +1,7 @@
-.venv
+.venv/
 __pycache__/
 *.pyc
 exploitdb.json
 .pytest_cache/
+node_modules/
+.history/
