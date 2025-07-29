@@ -1,8 +1,6 @@
 import sys
 import scanner.fast_scanner as fast_scanner
 import scanner.service_scanner as service_scanner
-from scanner.cve_mapper_cpe import map_services_to_cves
-# import exploit.smart_exploit_runner as exploit_runner
 import scanner.host_discovery as host_discovery
 
 # target machine IP or subnet
@@ -36,37 +34,62 @@ while True:
         if 0 <= idx < len(live_hosts):
             target = live_hosts[idx]
             print(f"\n=== Scanning host: {target} ===")
+            
             # perform fast port scan
             results = fast_scanner.port_scan(target, ports)
             # extract open ports from scan results
             filtered_ports = fast_scanner.extract_open_ports_and_protocols(results, target)
             print(filtered_ports)
-            # perform detailed service detection (product/version)
+            
+            # perform detailed service detection with integrated CVE mapping
             enriched_results = service_scanner.service_scan(target, filtered_ports)
-            print(enriched_results)
-            # map services to CVEs using official CPE-based lookup
-            print("\n-> Mapping services to CVEs...")
-            cve_results = map_services_to_cves(enriched_results)
-            print(cve_results)
-            # display final CVE report
-            print("\n-> CVE Summary:")
-            for item in cve_results:
-                cves = ", ".join(item["cves"]) if item["cves"] else "No CVEs found"
-                cve_summary = f"Port: {item['port']}, Service: {item['service']}, Product: {item['product']}, Version: {item['version']} → CVEs: {cves}"
-                print(f"Port: {item['port']}, Service: {item['service']}, Version: {item['version']} → CVEs: {cves}")
+            print("\n=== Service Detection & CVE Mapping Results ===")
+            
+            # Display comprehensive results
+            for item in enriched_results:
+                port = item.get('port', 'Unknown')
+                service = item.get('service', 'Unknown')
+                product = item.get('product', 'Unknown')
+                version = item.get('version', 'Unknown')
+                confidence = item.get('confidence', 'Unknown')
+                
+                # CVE information from new mapper
+                cves = item.get('cves', [])
+                cve_summary = item.get('cve_summary', {})
+                
+                print(f"\nPort {port} ({item.get('protocol', 'Unknown')}):")
+                print(f"  Service: {service}")
+                print(f"  Product: {product}")
+                print(f"  Version: {version}")
+                print(f"  Confidence: {confidence}")
+                
+                if cves:
+                    print(f"  CVEs Found: {len(cves)}")
+                    print(f"  Highest Severity: {cve_summary.get('highest_severity', 'Unknown')}")
+                    print(f"  Average CVSS Score: {cve_summary.get('average_score', 0):.1f}")
+                    
+                    # Show top 3 CVEs
+                    for i, cve in enumerate(cves[:3]):
+                        print(f"    {i+1}. {cve['id']} - {cve['severity']} (Score: {cve['base_score']})")
+                        print(f"       {cve['description'][:80]}...")
+                else:
+                    print("  CVEs: None found")
+            
             # run exploitation module
             from exploit.exploitation import exploit_services
-            if not cve_results:
-                print("! No CVEs found to exploit.")
+            if not enriched_results:
+                print("! No services found to exploit.")
             else:
                 print("\n-> Starting exploitation...")
-                cve_results = exploit_services(cve_results)  # Update cve_results with exploits
+                exploit_results = exploit_services(enriched_results)  # Update with exploits
                 print("-> Exploitation completed.")
+            
             # run exploits dynamically with smart filtering
             print("\n-> Running exploits with smart exploit runner...")
             from exploit.smart_exploit_runner import run_exploits_smart
-            successful_exploits = run_exploits_smart(cve_results, target)
+            successful_exploits = run_exploits_smart(enriched_results, target)
             print("-> Smart exploit runner completed.")
+            
             # final summary
             if successful_exploits:
                 print(f"\n SUCCESS! Found {len(successful_exploits)} working exploits!")
@@ -81,8 +104,10 @@ while True:
                 print("2. Services are properly configured") 
                 print("3. Network filtering is in place")
                 print("4. Try testing on Metasploitable 2 for guaranteed results")
+            
             scanned_hosts.add(target)
         else:
             print("Invalid selection. Please try again.")
-    except Exception:
+    except Exception as e:
+        print(f"Error during scanning: {e}")
         print("Invalid input. Please enter a valid number.")

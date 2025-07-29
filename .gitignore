@@ -5,3 +5,4 @@ exploitdb.json
 .pytest_cache/
 node_modules/
 .history/
+backend/core/data/

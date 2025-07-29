@@ -1,9 +1,12 @@
 from nmap import PortScanner
 from . import utils
+from .cve_mapper import get_cve_mapper
 
 def service_scan(target, open_ports):
     scanner = PortScanner()
+    cve_mapper = get_cve_mapper()
     final_output = []
+    
     # running TCP scan on the open ports along with OS detection
     tcp_ports = [str(p['port']) for p in open_ports if p['protocol'] == 'tcp']
     if tcp_ports:
@@ -33,6 +36,20 @@ def service_scan(target, open_ports):
                 # Always try to grab a banner for logging
                 raw_banner = utils.grab_banner(target, port)
                 print(f"Port {port}: service='{service}', product='{product}', version='{version}', banner='{raw_banner}', probe='{extrabanner}'")
+                
+                # Map service to CVEs
+                service_info = {
+                    'service': service,
+                    'product': product,
+                    'version': version,
+                    'port': port,
+                    'protocol': 'tcp'
+                }
+                cves = cve_mapper.map_service_to_cves(service_info)
+                cve_summary = cve_mapper.get_cve_summary(cves)
+                
+                print(f"  -> Found {len(cves)} CVEs (Highest: {cve_summary['highest_severity']}, Avg Score: {cve_summary['average_score']:.1f})")
+                
                 final_output.append({
                     'port': port,
                     'protocol': 'tcp',
@@ -41,7 +58,9 @@ def service_scan(target, open_ports):
                     'version': version,
                     'banner': raw_banner,
                     'probe': extrabanner,
-                    'confidence': confidence
+                    'confidence': confidence,
+                    'cves': cves,
+                    'cve_summary': cve_summary
                 })
             # extract OS info if available
             os_matches = target_data.get('osmatch', [])
@@ -55,6 +74,19 @@ def service_scan(target, open_ports):
                         if cpe:
                             os_cpe = cpe[0]
                             break
+                
+                # Map OS to CVEs
+                os_info = {
+                    'service': 'operating_system',
+                    'product': os_name,
+                    'version': '',
+                    'cpe': os_cpe
+                }
+                os_cves = cve_mapper.map_service_to_cves(os_info)
+                os_cve_summary = cve_mapper.get_cve_summary(os_cves)
+                
+                print(f"OS: {os_name} -> Found {len(os_cves)} CVEs (Highest: {os_cve_summary['highest_severity']})")
+                
                 final_output.append({
                     'port': 'OS',
                     'protocol': 'os',
@@ -62,8 +94,11 @@ def service_scan(target, open_ports):
                     'product': os_name,
                     'version': '',
                     'cpe': os_cpe,
-                    'confidence': 'high'
+                    'confidence': 'high',
+                    'cves': os_cves,
+                    'cve_summary': os_cve_summary
                 })
+    
     # running UDP scan for services on open ports
     udp_ports = [str(p['port']) for p in open_ports if p['protocol'] == 'udp']
     if udp_ports:
@@ -88,6 +123,20 @@ def service_scan(target, open_ports):
                     service = guessed
                 raw_banner = utils.grab_banner(target, port)
                 print(f"UDP Port {port}: service='{service}', product='{product}', version='{version}', banner='{raw_banner}', probe='{extrabanner}'")
+                
+                # Map service to CVEs
+                service_info = {
+                    'service': service,
+                    'product': product,
+                    'version': version,
+                    'port': port,
+                    'protocol': 'udp'
+                }
+                cves = cve_mapper.map_service_to_cves(service_info)
+                cve_summary = cve_mapper.get_cve_summary(cves)
+                
+                print(f"  -> Found {len(cves)} CVEs (Highest: {cve_summary['highest_severity']}, Avg Score: {cve_summary['average_score']:.1f})")
+                
                 final_output.append({
                     'port': port,
                     'protocol': 'udp',
@@ -96,6 +145,9 @@ def service_scan(target, open_ports):
                     'version': version,
                     'banner': raw_banner,
                     'probe': extrabanner,
-                    'confidence': confidence
+                    'confidence': confidence,
+                    'cves': cves,
+                    'cve_summary': cve_summary
                 })
+    
     return final_output
