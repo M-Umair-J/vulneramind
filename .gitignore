@@ -2,6 +2,13 @@
 __pycache__/
 *.pyc
 exploitdb.json
+
+# SQLite database files
+*.db
+*.sqlite
+*.sqlite3
+backend/core/data/nvd.db
+
 .pytest_cache/
 node_modules/
 .history/

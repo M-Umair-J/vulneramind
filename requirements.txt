@@ -2,6 +2,9 @@
 python-nmap>=0.7.0              # Network scanning and service detection
 requests>=2.31.0                # HTTP client for NVD API calls
 
+# database and data processing
+# Note: sqlite3 is built into Python, no additional installation needed
+
 # AI and language models
 openai>=1.0.0                   # OpenAI API integration (not right now) so not really needed for current testing
 

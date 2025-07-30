@@ -70,7 +70,7 @@ while True:
                     
                     # Show top 3 CVEs
                     for i, cve in enumerate(cves[:3]):
-                        print(f"    {i+1}. {cve['id']} - {cve['severity']} (Score: {cve['base_score']})")
+                        print(f"    {i+1}. {cve['id']} - {cve['severity']} (Score: {cve['score']})")
                         print(f"       {cve['description'][:80]}...")
                 else:
                     print("  CVEs: None found")
