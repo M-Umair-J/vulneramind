@@ -75,16 +75,38 @@ while True:
                 else:
                     print("  CVEs: None found")
             
-            # run exploitation module
-            from exploit.exploitation import exploit_services
+            # run exploitation module with classification
+            from exploit.exploitation import exploit_services, present_exploit_summary
             if not enriched_results:
                 print("! No services found to exploit.")
             else:
                 print("\n-> Starting exploitation...")
                 exploit_results = exploit_services(enriched_results)  # Update with exploits
                 print("-> Exploitation completed.")
+                
+                # Present exploit summary and get user choice
+                execution_choice = present_exploit_summary(enriched_results)
+                
+                if execution_choice == "1":
+                    print("\n🚀 Running Smart Auto Exploitation...")
+                    from exploit.exploitation import smart_auto_execution
+                    successful_exploits = smart_auto_execution(enriched_results, target)
+                elif execution_choice == "2":
+                    print("\n🎯 Manual Selection Mode...")
+                    from exploit.exploitation import manual_selection_execution
+                    successful_exploits = manual_selection_execution(enriched_results, target)
+                elif execution_choice == "3":
+                    print("\n💥 RCE Only Mode...")
+                    from exploit.exploitation import rce_only_execution
+                    successful_exploits = rce_only_execution(enriched_results, target)
+                elif execution_choice == "4":
+                    print("\n⏭️ Skipping exploitation.")
+                    successful_exploits = []
+                else:
+                    print("\n❌ Invalid choice. Skipping exploitation.")
+                    successful_exploits = []
             
-            # run exploits dynamically with smart filtering
+            # run exploits dynamically with smart filtering (legacy)
             print("\n-> Running exploits with smart exploit runner...")
             from exploit.smart_exploit_runner import run_exploits_smart
             successful_exploits = run_exploits_smart(enriched_results, target)

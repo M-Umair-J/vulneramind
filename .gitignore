@@ -13,3 +13,5 @@ backend/core/data/nvd.db
 node_modules/
 .history/
 backend/core/data/
+
+frontend/.next/
