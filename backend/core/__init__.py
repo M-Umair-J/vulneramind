@@ -1,4 +1,5 @@
 import sys
+import os
 import scanner.fast_scanner as fast_scanner
 import scanner.service_scanner as service_scanner
 import scanner.host_discovery as host_discovery
@@ -87,7 +88,69 @@ while True:
                 # Present exploit summary and get user choice
                 execution_choice = present_exploit_summary(enriched_results)
                 
-                if execution_choice == "1":
+                if execution_choice == "5":
+                    print("\n⚡ Opening Metasploit terminal...")
+                    
+                    # Check if we're on Windows or Linux/WSL
+                    import platform
+                    import subprocess
+                    system = platform.system().lower()
+                    
+                    if system == "windows":
+                        try:
+                            os.system("start cmd /k python e:\\vulneramind_on_cursor\\vulneramind\\backend\\core\\msf_rpc_terminal.py")
+                            print("✅ Metasploit terminal opened in new window")
+                        except Exception as e:
+                            print(f"❌ Failed to open Windows terminal: {e}")
+                    else:
+                        # For Linux/WSL, try different approaches
+                        terminal_opened = False
+                        
+                        # First try: Check which terminal is available
+                        available_terminals = []
+                        terminal_commands = [
+                            ("gnome-terminal", "gnome-terminal -- python3 /mnt/e/vulneramind_on_cursor/vulneramind/backend/core/msf_rpc_terminal.py"),
+                            ("xterm", "xterm -e python3 /mnt/e/vulneramind_on_cursor/vulneramind/backend/core/msf_rpc_terminal.py"),
+                            ("konsole", "konsole -e python3 /mnt/e/vulneramind_on_cursor/vulneramind/backend/core/msf_rpc_terminal.py"),
+                            ("terminator", "terminator -e python3 /mnt/e/vulneramind_on_cursor/vulneramind/backend/core/msf_rpc_terminal.py"),
+                            ("x-terminal-emulator", "x-terminal-emulator -e python3 /mnt/e/vulneramind_on_cursor/vulneramind/backend/core/msf_rpc_terminal.py")
+                        ]
+                        
+                        # Check which terminals are available
+                        for term_name, term_cmd in terminal_commands:
+                            try:
+                                result = subprocess.run(["which", term_name], capture_output=True, text=True)
+                                if result.returncode == 0:
+                                    available_terminals.append((term_name, term_cmd))
+                            except:
+                                continue
+                        
+                        # Try to open with available terminals
+                        for term_name, term_cmd in available_terminals:
+                            try:
+                                subprocess.Popen(term_cmd.split(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                print(f"✅ Metasploit terminal opened using {term_name}")
+                                terminal_opened = True
+                                break
+                            except Exception as e:
+                                print(f"❌ Failed to open {term_name}: {e}")
+                                continue
+                        
+                        if not terminal_opened:
+                            print("❌ Could not open terminal automatically.")
+                            print("🔧 No suitable terminal emulator found.")
+                            print("📋 Please run manually in a new terminal:")
+                            print("   cd /mnt/e/vulneramind_on_cursor/vulneramind/backend/core")
+                            print("   python3 msf_rpc_terminal.py")
+                            print("\n💡 Or install a terminal emulator:")
+                            print("   sudo apt install gnome-terminal")
+                            choice = input("\nPress Enter to continue or 'q' to quit: ")
+                            if choice.lower() == 'q':
+                                sys.exit(0)
+                    
+                    print("💡 You can now use Metasploit commands to exploit the target")
+                    continue  # Go back to host selection
+                elif execution_choice == "1":
                     print("\n🚀 Running Smart Auto Exploitation...")
                     from exploit.exploitation import smart_auto_execution
                     successful_exploits = smart_auto_execution(enriched_results, target)
