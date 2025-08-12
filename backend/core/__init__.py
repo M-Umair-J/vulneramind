@@ -148,6 +148,77 @@ while True:
                             if choice.lower() == 'q':
                                 sys.exit(0)
                     
+                    # Generate AI suggestions for all found exploits
+                    print("\n🤖 Generating AI Metasploit Suggestions...")
+                    print("=" * 60)
+                    
+                    try:
+                        # Import the AI module
+                        from find_metasploit_exploit import find_metasploit_exploit
+                        
+                        # Collect all exploits from all services
+                        all_exploits = []
+                        for service in enriched_results:
+                            exploits = service.get('exploits', [])
+                            for exploit in exploits:
+                                # Prepare exploit data for AI
+                                exploit_data = {
+                                    'host': target,
+                                    'port': service.get('port'),
+                                    'service': service.get('service'),
+                                    'product': service.get('product', 'Unknown'),
+                                    'version': service.get('version', 'Unknown'),
+                                    'exploit_title': exploit.get('Title', ''),
+                                    'exploit_description': exploit.get('Description', ''),
+                                    'exploit_type': exploit.get('Type', ''),
+                                    'exploit_platform': exploit.get('Platform', ''),
+                                    'exploit_path': exploit.get('Path', ''),
+                                    'cves': service.get('cves', [])
+                                }
+                                all_exploits.append((exploit, exploit_data))
+                        
+                        if all_exploits:
+                            print(f"🎯 Processing {len(all_exploits)} exploits for AI analysis...\n")
+                            
+                            for i, (exploit, exploit_data) in enumerate(all_exploits, 1):
+                                print(f"📋 [{i}/{len(all_exploits)}] {exploit.get('Title', 'Unknown Exploit')}")
+                                print(f"🎯 Target: {exploit_data['host']}:{exploit_data['port']}")
+                                print(f"📡 Service: {exploit_data['service']} ({exploit_data['product']} {exploit_data['version']})")
+                                
+                                # Get AI suggestion
+                                ai_suggestion = find_metasploit_exploit(exploit_data)
+                                
+                                if 'error' in ai_suggestion:
+                                    print(f"❌ AI Error: {ai_suggestion['error']}")
+                                else:
+                                    print(f"🔥 Suggested Module: {ai_suggestion.get('exploit_module', 'N/A')}")
+                                    print(f"💾 Payload: {ai_suggestion.get('payload', 'N/A')}")
+                                    
+                                    # Show commands
+                                    commands = ai_suggestion.get('commands', [])
+                                    if commands:
+                                        print("📝 Commands:")
+                                        for cmd in commands:
+                                            print(f"   {cmd}")
+                                    
+                                    # Show required options
+                                    req_opts = ai_suggestion.get('required_options', {})
+                                    if req_opts:
+                                        print("⚙️ Required Options:")
+                                        for opt, val in req_opts.items():
+                                            print(f"   {opt} = {val}")
+                                
+                                print("-" * 50)
+                        else:
+                            print("❌ No exploits found to analyze")
+                    
+                    except ImportError as e:
+                        print(f"❌ Could not import AI module: {e}")
+                        print("💡 Make sure the find_metasploit_exploit module is available")
+                    except Exception as e:
+                        print(f"❌ Error generating AI suggestions: {e}")
+                    
+                    print("\n💡 Use the suggestions above in your Metasploit terminal")
                     print("💡 You can now use Metasploit commands to exploit the target")
                     continue  # Go back to host selection
                 elif execution_choice == "1":
