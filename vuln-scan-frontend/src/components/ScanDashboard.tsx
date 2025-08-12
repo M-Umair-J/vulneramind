@@ -1,6 +1,14 @@
 'use client';
 
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
+import SimpleTerminal from './SimpleTerminal';
+
+// Import MetasploitTerminal dynamically to avoid SSR issues
+const MetasploitTerminal = dynamic(() => import('./MetasploitTerminal'), {
+  ssr: false,
+  loading: () => <div>Loading Metasploit Terminal...</div>
+});
 
 interface ScanDashboardProps {
   data: any[];
@@ -13,6 +21,10 @@ export default function ScanDashboard({ data }: ScanDashboardProps) {
   const [executionResults, setExecutionResults] = useState<any | null>(null);
   const [showExecuteButton, setShowExecuteButton] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [terminalOpen, setTerminalOpen] = useState(false);
+  const [metasploitTerminalOpen, setMetasploitTerminalOpen] = useState(false);
+  const [selectedExploitCommands, setSelectedExploitCommands] = useState<any>(null);
+  const [metasploitDetails, setMetasploitDetails] = useState<any[]>([]);
 
   const showDetails = (entry: any) => {
     const result = entry.result?.[0] || entry;
@@ -36,6 +48,7 @@ export default function ScanDashboard({ data }: ScanDashboardProps) {
     
     setIsExploitingInProgress(true);
     setExploitResults(null);
+    setMetasploitDetails([]); // Clear previous details
     
     try {
       const response = await fetch('http://localhost:8000/exploit', {
@@ -44,8 +57,7 @@ export default function ScanDashboard({ data }: ScanDashboardProps) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          host: selectedHostData.host,
-          services: selectedHostData.services || []
+          host_data: selectedHostData
         }),
       });
       
@@ -56,6 +68,10 @@ export default function ScanDashboard({ data }: ScanDashboardProps) {
       const result = await response.json();
       setExploitResults(result);
       setShowExecuteButton(true);
+      
+      // Now get the AI-generated Metasploit details
+      await getMetasploitDetails();
+      
     } catch (error) {
       console.error('Error finding exploits:', error);
       alert('Failed to find exploits. Make sure the backend is running.');
@@ -93,6 +109,45 @@ export default function ScanDashboard({ data }: ScanDashboardProps) {
       alert('Failed to execute exploits. Make sure the backend is running.');
     } finally {
       setIsExploitingInProgress(false);
+    }
+  };
+
+  const openTerminal = (exploitCommands?: any) => {
+    setSelectedExploitCommands(exploitCommands);
+    setTerminalOpen(true);
+  };
+
+  const closeTerminal = () => {
+    setTerminalOpen(false);
+    setSelectedExploitCommands(null);
+  };
+
+  const getMetasploitDetails = async () => {
+    if (!selectedHostData || !exploitResults) return;
+    
+    try {
+      // Use the exploit results data instead of just the host data
+      const requestData = {
+        host: selectedHostData.host,
+        services: exploitResults.services || [] // This contains the enriched services with exploits
+      };
+      
+      const response = await fetch('http://localhost:8000/metasploit-details', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestData),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to get Metasploit details');
+      }
+      
+      const result = await response.json();
+      setMetasploitDetails(result.exploits || []);
+    } catch (error) {
+      console.error('Error getting Metasploit details:', error);
     }
   };
 
@@ -175,39 +230,84 @@ export default function ScanDashboard({ data }: ScanDashboardProps) {
                 {isExploitingInProgress ? '🚀 Executing...' : '🚀 Execute Exploits'}
               </button>
             )}
+
+            <button
+              onClick={() => openTerminal()}
+              className="px-6 py-3 rounded font-semibold text-white bg-purple-600 hover:bg-purple-700"
+            >
+              🖥️ Open Terminal
+            </button>
+
+            <button
+              onClick={() => setMetasploitTerminalOpen(true)}
+              className="px-6 py-3 rounded font-semibold text-white bg-red-800 hover:bg-red-900"
+            >
+              ⚡ Metasploit Console
+            </button>
           </div>
 
           {/* Exploit Discovery Results */}
           {exploitResults && (
             <div className="mb-6 p-4 bg-white rounded border">
               <h4 className="font-semibold text-gray-800 mb-3">🎯 Exploit Discovery Results</h4>
-              {exploitResults.summary?.length > 0 ? (
+              
+              {/* Overall Classification Summary */}
+              {exploitResults.classification && (
+                <div className="mb-4 p-4 bg-gray-50 rounded border">
+                  <h5 className="font-medium text-gray-800 mb-2">📊 Overall Summary</h5>
+                  <div className="flex flex-wrap gap-4 text-sm">
+                    <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                      🔥 Total: {exploitResults.classification.total_count}
+                    </span>
+                    <span className="bg-red-100 text-red-800 px-2 py-1 rounded">
+                      💥 RCE: {exploitResults.classification.rce_count}
+                    </span>
+                    <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded">
+                      💀 DoS: {exploitResults.classification.dos_count}
+                    </span>
+                    <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
+                      🔓 Auth Bypass: {exploitResults.classification.auth_bypass_count}
+                    </span>
+                    <span className="bg-green-100 text-green-800 px-2 py-1 rounded">
+                      📊 Info Disclosure: {exploitResults.classification.info_disclosure_count}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Services with Exploits */}
+              {exploitResults.services?.length > 0 ? (
                 <div className="space-y-3">
-                  {exploitResults.summary.map((service: any, idx: number) => (
+                  <h5 className="font-medium text-gray-800 mb-2">🔍 Exploits by Service</h5>
+                  {exploitResults.services.map((service: any, idx: number) => (
                     <div key={idx} className="bg-gray-50 p-4 rounded border">
-                      <p className="font-medium text-black mb-2">{service.service} (Port {service.port})</p>
-                      <div className="flex flex-wrap gap-4 text-sm">
-                        <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                          🔥 Total: {service.total_exploits}
-                        </span>
-                        <span className="bg-red-100 text-red-800 px-2 py-1 rounded">
-                          💥 RCE: {service.rce_count}
-                        </span>
-                        <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded">
-                          💀 DoS: {service.dos_count}
-                        </span>
-                        <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
-                          🔓 Auth Bypass: {service.auth_bypass_count}
-                        </span>
-                        <span className="bg-green-100 text-green-800 px-2 py-1 rounded">
-                          📊 Info Disclosure: {service.info_disclosure_count}
-                        </span>
-                      </div>
+                      <p className="font-medium text-black mb-2">
+                        {service.service || 'Unknown Service'} (Port {service.port})
+                      </p>
+                      {service.exploits?.length > 0 ? (
+                        <div className="space-y-2">
+                          <p className="text-sm text-gray-600">Found {service.exploits.length} exploits:</p>
+                          <div className="max-h-40 overflow-y-auto space-y-1">
+                            {service.exploits.slice(0, 5).map((exploit: any, eIdx: number) => (
+                              <div key={eIdx} className="text-xs bg-white p-2 rounded border">
+                                <span className="font-medium text-red-600">{exploit.Title}</span>
+                                <br />
+                                <span className="text-gray-500">Path: {exploit.Path}</span>
+                              </div>
+                            ))}
+                            {service.exploits.length > 5 && (
+                              <p className="text-xs text-gray-500">...and {service.exploits.length - 5} more</p>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-500">No exploits found for this service</p>
+                      )}
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-gray-600">No exploits found for this host.</p>
+                <p className="text-gray-600">No services with exploits found for this host.</p>
               )}
             </div>
           )}
@@ -241,6 +341,58 @@ export default function ScanDashboard({ data }: ScanDashboardProps) {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* AI-Generated Metasploit Details */}
+          {metasploitDetails.length > 0 && (
+            <div className="mb-6 p-4 bg-white rounded border">
+              <h4 className="font-semibold text-gray-800 mb-3">🎯 AI-Generated Metasploit Commands</h4>
+              {metasploitDetails.map((exploit: any, idx: number) => (
+                <div key={idx} className="bg-gray-50 p-4 rounded border mb-3">
+                  <div className="flex justify-between items-start mb-3">
+                    <h5 className="font-medium text-black text-lg">{exploit.cve_id}</h5>
+                    <button
+                      onClick={() => openTerminal(exploit.metasploit_commands)}
+                      className="px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700"
+                    >
+                      🚀 Execute in Terminal
+                    </button>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <p className="text-sm"><strong>Service:</strong> {exploit.service} (Port {exploit.port})</p>
+                    <p className="text-sm"><strong>Product:</strong> {exploit.product} {exploit.version}</p>
+                    <p className="text-sm"><strong>CVE:</strong> {exploit.cve_id} (Score: {exploit.cve_score})</p>
+                    
+                    {exploit.metasploit_commands?.commands && (
+                      <div>
+                        <h6 className="font-medium text-black mb-2">Commands to execute:</h6>
+                        <div className="bg-black text-green-400 p-3 rounded font-mono text-sm">
+                          {exploit.metasploit_commands.commands.map((cmd: string, cmdIdx: number) => (
+                            <div key={cmdIdx} className="mb-1">
+                              {cmd}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {exploit.metasploit_commands?.required_options && (
+                      <div>
+                        <h6 className="font-medium text-black mb-2">Required Options:</h6>
+                        <div className="space-y-1">
+                          {Object.entries(exploit.metasploit_commands.required_options).map(([key, value]) => (
+                            <div key={key} className="text-sm">
+                              <strong>{key}:</strong> {value}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -318,6 +470,19 @@ export default function ScanDashboard({ data }: ScanDashboardProps) {
           </div>
         </div>
       )}
+
+      {/* Terminal */}
+      <SimpleTerminal 
+        isOpen={terminalOpen} 
+        onClose={closeTerminal}
+        exploitCommands={selectedExploitCommands}
+      />
+
+      {/* Metasploit Terminal */}
+      <MetasploitTerminal
+        isOpen={metasploitTerminalOpen}
+        onClose={() => setMetasploitTerminalOpen(false)}
+      />
     </div>
   );
 }
