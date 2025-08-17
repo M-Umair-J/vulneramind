@@ -141,8 +141,8 @@
 
 from nmap import PortScanner
 from . import utils
-from .cve_mapper import get_cve_mapper
-from logger import log_message  # ✅ New import
+from .cve_mapper_real import get_cve_mapper  # ✅ Use real CVE mapper
+from logger import log_message
 
 def service_scan(target, open_ports):
     scanner = PortScanner()

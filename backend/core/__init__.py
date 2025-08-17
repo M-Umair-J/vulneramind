@@ -3,6 +3,38 @@ import os
 import scanner.fast_scanner as fast_scanner
 import scanner.service_scanner as service_scanner
 import scanner.host_discovery as host_discovery
+from logger import log_message
+
+# Print banner
+print("🛡️  VulneraMind Security Scanner")
+print("=" * 50)
+print("📋 Workflow: Input → Discover → Scan → Exploits → AI → Metasploit")
+print("🔥 Using real CVE database with 88,820+ vulnerabilities")
+print("💥 Using real ExploitDB with 50,000+ exploits")
+print("=" * 50)
+
+# Verify data sources
+try:
+    from scanner.cve_mapper_real import get_cve_mapper
+    cve_mapper = get_cve_mapper()
+    db_status = cve_mapper.get_database_status()
+    log_message(f"📊 CVE Database: {db_status['status']} ({db_status.get('cve_count', 'unknown')} CVEs)")
+except Exception as e:
+    log_message(f"⚠️ CVE mapper issue: {e}")
+
+try:
+    import json
+    from pathlib import Path
+    exploitdb_path = Path('exploitdb.json')
+    if exploitdb_path.exists():
+        size_mb = exploitdb_path.stat().st_size / (1024 * 1024)
+        log_message(f"💥 ExploitDB: File loaded ({size_mb:.1f}MB)")
+    else:
+        log_message("⚠️ ExploitDB: File not found")
+except Exception as e:
+    log_message(f"⚠️ ExploitDB check failed: {e}")
+
+print("=" * 50)
 
 # target machine IP or subnet
 if len(sys.argv) > 1:
@@ -153,7 +185,7 @@ while True:
                     print("=" * 60)
                     
                     try:
-                        # Import the AI module
+                        # Import the AI module  
                         from find_metasploit_exploit import find_metasploit_exploit
                         
                         # Collect all exploits from all services

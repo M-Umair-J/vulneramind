@@ -336,7 +336,7 @@ export default function VulneraMindWorkflow() {
             📊 Scan Results for {state.selectedHost} ({state.scanResults.length} services)
           </h2>
           
-          <div className="space-y-4 mb-6">
+              <div className="space-y-4 mb-6">
             {state.scanResults.map((result, index) => (
               <div key={index} className="border border-gray-200 rounded-lg p-4">
                 <div className="flex justify-between items-start">
@@ -352,11 +352,36 @@ export default function VulneraMindWorkflow() {
                     <div className="text-sm text-gray-500">Confidence: {result.confidence}</div>
                   </div>
                   {result.cves && result.cves.length > 0 && (
-                    <span className="px-2 py-1 bg-red-100 text-red-600 rounded text-sm">
-                      {result.cves.length} CVEs
-                    </span>
+                    <div>
+                      <button
+                        onClick={() => {
+                          const cveDetails = result.cves.map((cve: any) => 
+                            `${cve.id} (${cve.severity}) - Score: ${cve.score}\n${cve.description}`
+                          ).join('\n\n');
+                          alert(`CVEs found for ${result.service}:\n\n${cveDetails}`);
+                        }}
+                        className="px-3 py-1 bg-red-100 text-red-600 rounded text-sm hover:bg-red-200 transition-colors"
+                      >
+                        {result.cves.length} CVEs (Click to view)
+                      </button>
+                    </div>
                   )}
                 </div>
+                
+                {/* CVE Summary */}
+                {result.cve_summary && (
+                  <div className="mt-3 text-xs text-gray-600">
+                    <span className="inline-block mr-4">
+                      🔥 High/Critical: {result.cve_summary.high_severity_count || 0}
+                    </span>
+                    <span className="inline-block mr-4">
+                      📊 Avg Score: {result.cve_summary.average_score ? result.cve_summary.average_score.toFixed(1) : '0.0'}
+                    </span>
+                    <span className="inline-block">
+                      📈 Source: {result.cve_summary.data_source || 'unknown'}
+                    </span>
+                  </div>
+                )}
               </div>
             ))}
           </div>
