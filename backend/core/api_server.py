@@ -50,6 +50,12 @@ class AIRecommendationRequest(BaseModel):
     host: str
     exploit_results: List[Dict[str, Any]]
 
+class VulnerabilityReportRequest(BaseModel):
+    host: str
+    scan_results: List[Dict[str, Any]]
+    exploit_results: Optional[List[Dict[str, Any]]] = None
+    ai_recommendations: Optional[List[Dict[str, Any]]] = None
+
 # Response Models
 class HostDiscoveryResponse(BaseModel):
     hosts: List[str]
@@ -271,6 +277,50 @@ async def get_ai_recommendations(request: AIRecommendationRequest):
     except Exception as e:
         print(f"❌ AI recommendations failed: {e}")
         raise HTTPException(status_code=500, detail=f"AI recommendations failed: {str(e)}")
+
+@app.post("/generate-report")
+async def generate_vulnerability_report_endpoint(request: VulnerabilityReportRequest):
+    """
+    Generate comprehensive AI vulnerability assessment report
+    """
+    try:
+        print(f"🤖 Generating vulnerability report for: {request.host}")
+        
+        # Import the report generator
+        sys.path.insert(0, os.path.join(current_dir, '..', 'ai', 'reporting'))
+        from vulnerability_report_generator import generate_vulnerability_report
+        
+        # Generate the comprehensive report
+        report = generate_vulnerability_report(
+            target_host=request.host,
+            scan_results=request.scan_results,
+            exploit_results=request.exploit_results or [],
+            ai_recommendations=request.ai_recommendations or []
+        )
+        
+        # Convert to markdown format
+        from vulnerability_report_generator import VulnerabilityReportGenerator
+        generator = VulnerabilityReportGenerator()
+        markdown_report = generator.format_as_markdown(report)
+        
+        print(f"✅ Report generated successfully for {request.host}")
+        
+        return {
+            "success": True,
+            "message": f"Vulnerability report generated for {request.host}",
+            "report": report,
+            "markdown": markdown_report,
+            "metadata": {
+                "total_vulnerabilities": sum(len(service.get('cves', [])) for service in request.scan_results),
+                "total_services": len(request.scan_results),
+                "report_length": len(markdown_report),
+                "generation_timestamp": report['metadata']['scan_date']
+            }
+        }
+        
+    except Exception as e:
+        print(f"❌ Report generation error: {e}")
+        raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)}")
 
 @app.post("/open-metasploit")
 async def open_metasploit():

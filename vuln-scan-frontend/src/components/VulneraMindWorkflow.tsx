@@ -30,7 +30,7 @@ interface AIRecommendation {
 }
 
 interface WorkflowState {
-  step: 'input' | 'discover' | 'scan' | 'exploits' | 'ai' | 'metasploit';
+  step: 'input' | 'discover' | 'scan' | 'exploits' | 'ai' | 'metasploit' | 'report';
   target: string;
   hosts: string[];
   selectedHost: string;
@@ -38,6 +38,7 @@ interface WorkflowState {
   exploitResults: any[];
   aiRecommendations: AIRecommendation[];
   selectedServiceCVEs: ScanResult | null;
+  generatedReport: any;
 }
 
 export default function VulneraMindWorkflow() {
@@ -49,7 +50,8 @@ export default function VulneraMindWorkflow() {
     scanResults: [],
     exploitResults: [],
     aiRecommendations: [],
-    selectedServiceCVEs: null
+    selectedServiceCVEs: null,
+    generatedReport: null
   });
   
   const [loading, setLoading] = useState(false);
@@ -210,6 +212,51 @@ export default function VulneraMindWorkflow() {
     }
   };
 
+  // Step 7: Generate AI vulnerability report
+  const handleGenerateReport = async () => {
+    if (!state.scanResults.length) return;
+
+    setLoading(true);
+    setError('');
+
+    try {
+      console.log('📋 Generating AI vulnerability report for:', state.selectedHost);
+      const response = await apiCall('/generate-report', {
+        host: state.selectedHost,
+        scan_results: state.scanResults,
+        exploit_results: state.exploitResults,
+        ai_recommendations: state.aiRecommendations
+      });
+      
+      setState(prev => ({ 
+        ...prev, 
+        generatedReport: response,
+        step: 'report'
+      }));
+      console.log('✅ Report generated successfully');
+    } catch (err: any) {
+      setError(err.message);
+      console.error('❌ Report generation failed:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Download report as markdown file
+  const downloadReport = () => {
+    if (!state.generatedReport?.markdown) return;
+
+    const blob = new Blob([state.generatedReport.markdown], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `VulneraMind_Report_${state.selectedHost}_${new Date().toISOString().split('T')[0]}.md`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const resetWorkflow = () => {
     setState({
       step: 'input',
@@ -219,7 +266,8 @@ export default function VulneraMindWorkflow() {
       scanResults: [],
       exploitResults: [],
       aiRecommendations: [],
-      selectedServiceCVEs: null
+      selectedServiceCVEs: null,
+      generatedReport: null
     });
     setError('');
   };
@@ -232,24 +280,24 @@ export default function VulneraMindWorkflow() {
         </h1>
         <div className="bg-blue-50 p-4 rounded-lg mb-4">
           <p className="text-blue-800">
-            📋 <strong>Workflow:</strong> Enter IP/Subnet → Discover Hosts → Select Host → Scan Services → Find Exploits → AI Recommendations → Open Metasploit
+            📋 <strong>Workflow:</strong> Enter IP/Subnet → Discover Hosts → Select Host → Scan Services → Find Exploits → AI Recommendations → Open Metasploit → Generate AI Report
           </p>
         </div>
 
         {/* Progress Indicator */}
         <div className="flex items-center space-x-4 mb-6">
-          {['input', 'discover', 'scan', 'exploits', 'ai', 'metasploit'].map((step, index) => (
+          {['input', 'discover', 'scan', 'exploits', 'ai', 'metasploit', 'report'].map((step, index) => (
             <div
               key={step}
               className={`flex items-center ${
-                ['input', 'discover', 'scan', 'exploits', 'ai'].indexOf(state.step) >= index
+                ['input', 'discover', 'scan', 'exploits', 'ai', 'metasploit', 'report'].indexOf(state.step) >= index
                   ? 'text-blue-600'
                   : 'text-gray-400'
               }`}
             >
               <div
                 className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                  ['input', 'discover', 'scan', 'exploits', 'ai'].indexOf(state.step) >= index
+                  ['input', 'discover', 'scan', 'exploits', 'ai', 'metasploit', 'report'].indexOf(state.step) >= index
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-200 text-gray-400'
                 }`}
@@ -263,8 +311,9 @@ export default function VulneraMindWorkflow() {
                 {step === 'exploits' && 'Exploits'}
                 {step === 'ai' && 'AI'}
                 {step === 'metasploit' && 'Metasploit'}
+                {step === 'report' && 'Report'}
               </span>
-              {index < 5 && <span className="mx-2">→</span>}
+              {index < 6 && <span className="mx-2">→</span>}
             </div>
           ))}
         </div>
@@ -599,6 +648,13 @@ export default function VulneraMindWorkflow() {
               {loading ? '🔥 Opening...' : '🔥 Open Metasploit Terminal'}
             </button>
             <button
+              onClick={handleGenerateReport}
+              disabled={loading}
+              className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium"
+            >
+              {loading ? '📋 Generating...' : '📋 Generate AI Report'}
+            </button>
+            <button
               onClick={resetWorkflow}
               className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600"
             >
@@ -629,10 +685,157 @@ export default function VulneraMindWorkflow() {
           
           <button
             onClick={resetWorkflow}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium mr-4"
           >
             🔄 Start New Scan
           </button>
+          
+          <button
+            onClick={handleGenerateReport}
+            disabled={loading}
+            className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium"
+          >
+            {loading ? '📋 Generating...' : '📋 Generate AI Report'}
+          </button>
+        </div>
+      )}
+
+      {/* Step 7: AI Vulnerability Report */}
+      {state.step === 'report' && state.generatedReport && (
+        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+          <h2 className="text-xl font-bold mb-4">📋 AI Vulnerability Assessment Report</h2>
+          
+          <div className="bg-green-50 p-4 rounded-lg mb-6">
+            <p className="text-green-800 mb-2">
+              ✅ Comprehensive vulnerability assessment report has been generated for <strong>{state.selectedHost}</strong>
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div>
+                <span className="font-semibold">Total Vulnerabilities:</span>
+                <br />
+                {state.generatedReport.metadata?.total_vulnerabilities || 0}
+              </div>
+              <div>
+                <span className="font-semibold">Services Scanned:</span>
+                <br />
+                {state.generatedReport.metadata?.total_services || 0}
+              </div>
+              <div>
+                <span className="font-semibold">Report Length:</span>
+                <br />
+                {Math.round((state.generatedReport.metadata?.report_length || 0) / 1000)}K chars
+              </div>
+              <div>
+                <span className="font-semibold">Risk Level:</span>
+                <br />
+                <span className="font-bold text-red-600">
+                  {state.generatedReport.report?.risk_assessment?.overall_risk_level || 'Unknown'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Report Actions */}
+          <div className="flex gap-4 mb-6">
+            <button
+              onClick={downloadReport}
+              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+            >
+              💾 Download Report (Markdown)
+            </button>
+            <button
+              onClick={() => {
+                const reportWindow = window.open('', '_blank');
+                if (reportWindow) {
+                  reportWindow.document.write(`
+                    <html>
+                      <head>
+                        <title>VulneraMind Report - ${state.selectedHost}</title>
+                        <style>
+                          body { font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }
+                          h1, h2, h3 { color: #1f2937; }
+                          .metadata { background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0; }
+                          .critical { color: #dc2626; font-weight: bold; }
+                          .high { color: #ea580c; font-weight: bold; }
+                          .medium { color: #d97706; font-weight: bold; }
+                          .low { color: #16a34a; font-weight: bold; }
+                          pre { background: #f8fafc; padding: 15px; border-radius: 8px; overflow-x: auto; }
+                          code { background: #e5e7eb; padding: 2px 6px; border-radius: 4px; }
+                        </style>
+                      </head>
+                      <body>
+                        <pre>${state.generatedReport.markdown}</pre>
+                      </body>
+                    </html>
+                  `);
+                  reportWindow.document.close();
+                }
+              }}
+              className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
+            >
+              👁️ Preview Report
+            </button>
+            <button
+              onClick={resetWorkflow}
+              className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600"
+            >
+              ← Start Over
+            </button>
+          </div>
+
+          {/* Report Summary */}
+          <div className="bg-gray-50 p-6 rounded-lg">
+            <h3 className="font-bold text-gray-800 mb-4">Report Summary</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Executive Summary Preview */}
+              <div>
+                <h4 className="font-semibold text-gray-700 mb-2">Executive Summary Preview</h4>
+                <div className="bg-white p-4 rounded border text-sm text-gray-600 max-h-48 overflow-y-auto">
+                  {state.generatedReport.report?.executive_summary?.substring(0, 500) || 'No summary available'}
+                  {(state.generatedReport.report?.executive_summary?.length || 0) > 500 && '...'}
+                </div>
+              </div>
+
+              {/* Key Metrics */}
+              <div>
+                <h4 className="font-semibold text-gray-700 mb-2">Key Security Metrics</h4>
+                <div className="bg-white p-4 rounded border space-y-2">
+                  <div className="flex justify-between">
+                    <span>Risk Score:</span>
+                    <span className="font-bold">
+                      {state.generatedReport.report?.risk_assessment?.risk_score || 0}/100
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Avg CVSS Score:</span>
+                    <span className="font-bold">
+                      {state.generatedReport.report?.risk_assessment?.average_cvss_score || 0}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Critical Issues:</span>
+                    <span className="font-bold text-red-600">
+                      {state.generatedReport.report?.technical_findings?.length || 0}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Report Generated:</span>
+                    <span className="text-sm">
+                      {new Date(state.generatedReport.metadata?.generation_timestamp || '').toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 p-4 bg-yellow-50 rounded border-l-4 border-yellow-400">
+              <p className="text-yellow-800 text-sm">
+                <strong>📋 Report Contents:</strong> Executive Summary, Technical Findings, Risk Assessment, 
+                Exploit Analysis, Remediation Strategies, Compliance Impact, and Strategic Recommendations.
+              </p>
+            </div>
+          </div>
         </div>
       )}
     </div>
