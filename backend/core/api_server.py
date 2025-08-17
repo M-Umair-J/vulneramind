@@ -250,6 +250,12 @@ async def get_ai_recommendations(request: AIRecommendationRequest):
         if not all_exploits:
             raise HTTPException(status_code=404, detail="No exploits found to analyze")
         
+        # Limit to top 20 exploits to respect API quotas
+        max_exploits = 20
+        if len(all_exploits) > max_exploits:
+            print(f"⚠️ Limiting AI analysis to top {max_exploits} exploits (quota management)")
+            all_exploits = all_exploits[:max_exploits]
+        
         print(f"🎯 Processing {len(all_exploits)} exploits for AI analysis...")
         
         recommendations = []
