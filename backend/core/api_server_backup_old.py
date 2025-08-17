@@ -13,7 +13,7 @@ import time
 
 from scanner import host_discovery, fast_scanner, service_scanner
 from logger import log_message, get_logs, clear_logs, stream_log_generator
-from exploit.exploitation import find_exploits, classify_exploits
+from exploit.exploitation import exploit_services, classify_exploits, search_by_cves_in_memory, search_by_product_version_in_memory
 
 # Disable SSL warnings for self-signed certificates
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -185,24 +185,30 @@ def scan_network(request: ScanRequest):
             
             # Port scanning
             log_message(f"Phase 2: Port Scanning - {host}")
-            services = service_scanner.scan_services(host)
-            log_message(f"✅ Found {len(services)} services on {host}")
+            port_scan_results = fast_scanner.port_scan(host)
+            open_ports = fast_scanner.extract_open_ports_and_protocols(port_scan_results, host)
+            log_message(f"✅ Found {len(open_ports)} open ports on {host}")
             
-            # Vulnerability scanning
-            log_message(f"Phase 3: Vulnerability Assessment - {host}")
-            vulnerabilities = fast_scanner.scan_vulnerabilities_for_host(host, services)
-            log_message(f"✅ Identified {len(vulnerabilities)} potential vulnerabilities on {host}")
+            # Service scanning
+            log_message(f"Phase 3: Service Detection - {host}")
+            services = service_scanner.service_scan(host, open_ports)
+            log_message(f"✅ Found {len(services)} services on {host}")
             
             # Exploit discovery
             log_message(f"Phase 4: Exploit Discovery - {host}")
-            exploits = find_exploits(vulnerabilities)
+            services_with_exploits = exploit_services(services)
+            
+            # Extract all exploits from services
+            exploits = []
+            for service in services_with_exploits:
+                exploits.extend(service.get('exploits', []))
             log_message(f"✅ Found {len(exploits)} exploits for {host}")
             
             # Prepare result
             result = {
                 "host": host,
-                "services": services,
-                "vulnerabilities": vulnerabilities,
+                "open_ports": open_ports,
+                "services": services_with_exploits,
                 "exploits": exploits
             }
             all_results.append(result)
@@ -225,18 +231,25 @@ def discover_exploits(request: dict):
         
         # Extract services and vulnerabilities
         services = host_data.get("services", [])
-        vulnerabilities = host_data.get("vulnerabilities", [])
+        open_ports = host_data.get("open_ports", [])
         
-        # Find exploits for each service
+        # If no services yet, do port and service scanning first
+        if not services and open_ports:
+            log_message(f"🔍 Running service detection for {host_data.get('host')}")
+            services = service_scanner.service_scan(host_data.get('host'), open_ports)
+        elif not services:
+            log_message(f"🔍 Running port scan for {host_data.get('host')}")
+            port_scan_results = fast_scanner.port_scan(host_data.get('host'))
+            open_ports = fast_scanner.extract_open_ports_and_protocols(port_scan_results, host_data.get('host'))
+            services = service_scanner.service_scan(host_data.get('host'), open_ports)
+        
+        # Find exploits for services
         all_exploits = []
-        for service in services:
-            service_exploits = find_exploits([service])  # Pass as list
-            all_exploits.extend(service_exploits)
-            service['exploits'] = service_exploits
+        services_with_exploits = exploit_services(services)
         
-        # Also find exploits for vulnerabilities
-        vuln_exploits = find_exploits(vulnerabilities)
-        all_exploits.extend(vuln_exploits)
+        for service in services_with_exploits:
+            service_exploits = service.get('exploits', [])
+            all_exploits.extend(service_exploits)
         
         log_message(f"✅ Found {len(all_exploits)} total exploits")
         
@@ -245,7 +258,7 @@ def discover_exploits(request: dict):
         
         return {
             "exploits": all_exploits,
-            "services": services,
+            "services": services_with_exploits,
             "classification": {
                 "rce_count": len(classification.get('RCE', [])),
                 "dos_count": len(classification.get('DOS', [])),

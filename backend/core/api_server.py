@@ -1,382 +1,341 @@
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+#!/usr/bin/env python3
+"""
+VulneraMind Scanner API - Matches __init__.py functionality exactly
+Workflow: Input IP/Subnet -> Discover Hosts -> Select Host -> Scan -> Find Exploits -> AI Recommendations -> Open Metasploit
+"""
+
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
-from typing import List, Dict
-import msgpack
-import requests
-import urllib3
-import json
-import asyncio
-import threading
-import time
+from typing import List, Dict, Optional, Any
+import os
+import sys
+import platform
+import subprocess
 
-from scanner import host_discovery, fast_scanner, service_scanner
-from logger import log_message, get_logs, clear_logs, stream_log_generator
-from exploit.exploitation import exploit_services, classify_exploits, search_by_cves_in_memory, search_by_product_version_in_memory
+# Add the current directory to Python path for direct execution
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, current_dir)
 
-# Disable SSL warnings for self-signed certificates
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+# Import scanner modules (same as __init__.py)
+import scanner.fast_scanner as fast_scanner
+import scanner.service_scanner as service_scanner
+import scanner.host_discovery as host_discovery
+from exploit.exploitation import exploit_services, present_exploit_summary
+from find_metasploit_exploit import find_metasploit_exploit
 
-# Global variables
-logs = []
-scan_threads = []
-
-# Metasploit RPC connection globals
-msf_token = None
-msf_console_id = None
-msf_rpc_url = "https://127.0.0.1:55552/api/"
-msf_headers = {'Content-Type': 'binary/message-pack'}
-
-app = FastAPI()
+app = FastAPI(title="VulneraMind Scanner API", version="3.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-class ScanRequest(BaseModel):
-    target: str
+# Pydantic Models
+class HostDiscoveryRequest(BaseModel):
+    target: str  # IP or subnet
 
-class MetasploitConnection:
-    def __init__(self):
-        self.token = None
-        self.console_id = None
-        self.connected = False
-    
-    def connect(self, username="msf", password="abc123"):
-        """Connect to Metasploit RPC API"""
-        try:
-            auth_data = ['auth.login', username, password]
-            resp = requests.post(
-                msf_rpc_url,
-                data=msgpack.packb(auth_data),
-                headers=msf_headers,
-                verify=False,
-                timeout=10
-            )
-            
-            unpacker = msgpack.Unpacker()
-            unpacker.feed(resp.content)
-            for obj in unpacker:
-                if obj[0] == b'success':
-                    self.token = obj[1].decode() if isinstance(obj[1], bytes) else obj[1]
-                    log_message(f"✅ Connected to Metasploit RPC (Token: {self.token[:10]}...)")
-                    
-                    # Create a console
-                    self.create_console()
-                    self.connected = True
-                    return True
-                else:
-                    log_message(f"❌ Failed to authenticate: {obj}")
-                    return False
-        except Exception as e:
-            log_message(f"❌ Error connecting to Metasploit RPC: {str(e)}")
-            return False
-    
-    def create_console(self):
-        """Create a new console session"""
-        try:
-            console_data = ['console.create', self.token]
-            resp = requests.post(
-                msf_rpc_url,
-                data=msgpack.packb(console_data),
-                headers=msf_headers,
-                verify=False,
-                timeout=10
-            )
-            
-            unpacker = msgpack.Unpacker()
-            unpacker.feed(resp.content)
-            for obj in unpacker:
-                if b'id' in obj:
-                    self.console_id = obj[b'id']
-                    log_message(f"✅ Created Metasploit console (ID: {self.console_id})")
-                    return True
-        except Exception as e:
-            log_message(f"❌ Error creating console: {str(e)}")
-            return False
-    
-    def write_command(self, command):
-        """Send command to Metasploit console"""
-        if not self.connected or not self.console_id:
-            return "Not connected to Metasploit"
-        
-        try:
-            write_data = ['console.write', self.token, self.console_id, command + '\n']
-            resp = requests.post(
-                msf_rpc_url,
-                data=msgpack.packb(write_data),
-                headers=msf_headers,
-                verify=False,
-                timeout=10
-            )
-            return True
-        except Exception as e:
-            log_message(f"❌ Error writing command: {str(e)}")
-            return False
-    
-    def read_output(self):
-        """Read output from Metasploit console"""
-        if not self.connected or not self.console_id:
-            return ""
-        
-        try:
-            read_data = ['console.read', self.token, self.console_id]
-            resp = requests.post(
-                msf_rpc_url,
-                data=msgpack.packb(read_data),
-                headers=msf_headers,
-                verify=False,
-                timeout=10
-            )
-            
-            unpacker = msgpack.Unpacker()
-            unpacker.feed(resp.content)
-            for obj in unpacker:
-                if b'data' in obj:
-                    data = obj[b'data']
-                    if isinstance(data, bytes):
-                        return data.decode('utf-8', errors='ignore')
-                    return str(data)
-            return ""
-        except Exception as e:
-            log_message(f"❌ Error reading output: {str(e)}")
-            return ""
+class HostScanRequest(BaseModel):
+    host: str
+    ports: str = "1-1000"
 
-# Global Metasploit connection instance
-msf_connection = MetasploitConnection()
+class ExploitSearchRequest(BaseModel):
+    host: str
+    scan_results: List[Dict[str, Any]]
 
-@app.post("/discover")
-def discover_hosts(request: ScanRequest):
-    target = request.target
-    log_message(f"Discovering hosts for subnet: {target}")
+class AIRecommendationRequest(BaseModel):
+    host: str
+    exploit_results: List[Dict[str, Any]]
+
+# Response Models
+class HostDiscoveryResponse(BaseModel):
+    hosts: List[str]
+    total_hosts: int
+
+class ScanResult(BaseModel):
+    port: int
+    protocol: str
+    service: str
+    product: str
+    version: str
+    confidence: str
+    cves: List[Dict[str, Any]]
+    cve_summary: Dict[str, Any]
+
+class HostScanResponse(BaseModel):
+    host: str
+    scan_results: List[ScanResult]
+    total_services: int
+
+class ExploitResult(BaseModel):
+    Title: str
+    Description: str
+    Type: str
+    Platform: str
+    Path: str
+
+class ExploitSearchResponse(BaseModel):
+    host: str
+    exploits: List[Dict[str, Any]]
+    total_exploits: int
+    exploitation_summary: Dict[str, Any]
+
+class AIRecommendation(BaseModel):
+    exploit: Dict[str, Any]
+    ai_suggestion: Dict[str, Any]
+    exploit_data: Dict[str, Any]
+
+class AIRecommendationResponse(BaseModel):
+    host: str
+    recommendations: List[AIRecommendation]
+    total_recommendations: int
+
+@app.get("/")
+async def root():
+    return {"message": "VulneraMind Scanner API - Ready", "workflow": "IP/Subnet -> Discover -> Scan -> Exploits -> AI -> Metasploit"}
+
+@app.post("/discover-hosts", response_model=HostDiscoveryResponse)
+async def discover_hosts(request: HostDiscoveryRequest):
+    """
+    Step 1: Discover live hosts from IP or subnet (matches __init__.py line 14)
+    """
     try:
-        hosts = host_discovery.discover_live_hosts(target)
-        log_message(f"Discovered {len(hosts)} live hosts.")
-        return hosts
-    except Exception as e:
-        log_message(f"Error discovering hosts: {str(e)}")
-        raise HTTPException(status_code=500, detail="Discovery failed.")
-
-@app.post("/scan")
-def scan_network(request: ScanRequest):
-    target_input = request.target
-    clear_logs()
-    
-    log_message(f"Starting comprehensive vulnerability scan on: {target_input}")
-    
-    try:
-        # Discover live hosts
-        log_message("Phase 1: Host Discovery")
-        hosts = host_discovery.discover_live_hosts(target_input)
-        log_message(f"✅ Discovered {len(hosts)} live hosts")
+        print(f"🔍 Discovering hosts for: {request.target}")
         
-        if not hosts:
-            log_message("❌ No live hosts found. Scan terminated.")
-            return {"message": "No live hosts discovered", "results": []}
+        # Use the same function as __init__.py
+        live_hosts = host_discovery.discover_live_hosts(request.target)
         
-        all_results = []
-        for host in hosts:
-            log_message(f"🔍 Scanning host: {host}")
-            
-            # Port scanning
-            log_message(f"Phase 2: Port Scanning - {host}")
-            port_scan_results = fast_scanner.port_scan(host)
-            open_ports = fast_scanner.extract_open_ports_and_protocols(port_scan_results, host)
-            log_message(f"✅ Found {len(open_ports)} open ports on {host}")
-            
-            # Service scanning
-            log_message(f"Phase 3: Service Detection - {host}")
-            services = service_scanner.service_scan(host, open_ports)
-            log_message(f"✅ Found {len(services)} services on {host}")
-            
-            # Exploit discovery
-            log_message(f"Phase 4: Exploit Discovery - {host}")
-            services_with_exploits = exploit_services(services)
-            
-            # Extract all exploits from services
-            exploits = []
-            for service in services_with_exploits:
-                exploits.extend(service.get('exploits', []))
-            log_message(f"✅ Found {len(exploits)} exploits for {host}")
-            
-            # Prepare result
-            result = {
-                "host": host,
-                "open_ports": open_ports,
-                "services": services_with_exploits,
-                "exploits": exploits
-            }
-            all_results.append(result)
+        if not live_hosts:
+            raise HTTPException(status_code=404, detail="No live hosts found in the given range/subnet")
         
-        log_message(f"🎯 Scan completed successfully! Total hosts scanned: {len(all_results)}")
-        return {"message": "Scan completed successfully", "results": all_results}
+        print(f"✅ Found {len(live_hosts)} live hosts: {live_hosts}")
+        
+        return HostDiscoveryResponse(
+            hosts=live_hosts,
+            total_hosts=len(live_hosts)
+        )
         
     except Exception as e:
-        log_message(f"❌ Error during scan: {str(e)}")
-        raise HTTPException(status_code=500, detail="Scan failed.")
+        print(f"❌ Host discovery failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Host discovery failed: {str(e)}")
 
-@app.post("/exploit")
-def discover_exploits(request: dict):
+@app.post("/scan-host", response_model=HostScanResponse)
+async def scan_host(request: HostScanRequest):
+    """
+    Step 2: Scan selected host for services and CVEs (matches __init__.py lines 37-77)
+    """
     try:
-        host_data = request.get("host_data")
-        if not host_data:
-            raise HTTPException(status_code=400, detail="Host data is required")
+        target = request.host
+        ports = request.ports
         
-        log_message(f"🔍 Starting exploit discovery for {host_data.get('host')}")
+        print(f"🎯 Scanning host: {target} (ports: {ports})")
         
-        # Extract services and vulnerabilities
-        services = host_data.get("services", [])
-        open_ports = host_data.get("open_ports", [])
+        # Step 1: Fast port scan (same as __init__.py line 39)
+        results = fast_scanner.port_scan(target, ports)
+        filtered_ports = fast_scanner.extract_open_ports_and_protocols(results, target)
+        print(f"🔍 Found open ports: {filtered_ports}")
         
-        # If no services yet, do port and service scanning first
-        if not services and open_ports:
-            log_message(f"🔍 Running service detection for {host_data.get('host')}")
-            services = service_scanner.service_scan(host_data.get('host'), open_ports)
-        elif not services:
-            log_message(f"🔍 Running port scan for {host_data.get('host')}")
-            port_scan_results = fast_scanner.port_scan(host_data.get('host'))
-            open_ports = fast_scanner.extract_open_ports_and_protocols(port_scan_results, host_data.get('host'))
-            services = service_scanner.service_scan(host_data.get('host'), open_ports)
+        # Step 2: Service detection with CVE mapping (same as __init__.py line 43)
+        enriched_results = service_scanner.service_scan(target, filtered_ports)
+        print(f"✅ Service scan completed, found {len(enriched_results)} services")
         
-        # Find exploits for services
+        # Format results same as __init__.py display format
+        scan_results = []
+        for item in enriched_results:
+            scan_result = ScanResult(
+                port=item.get('port', 0),
+                protocol=item.get('protocol', 'Unknown'),
+                service=item.get('service', 'Unknown'),
+                product=item.get('product', 'Unknown'),
+                version=item.get('version', 'Unknown'),
+                confidence=item.get('confidence', 'Unknown'),
+                cves=item.get('cves', []),
+                cve_summary=item.get('cve_summary', {})
+            )
+            scan_results.append(scan_result)
+        
+        return HostScanResponse(
+            host=target,
+            scan_results=scan_results,
+            total_services=len(scan_results)
+        )
+        
+    except Exception as e:
+        print(f"❌ Host scan failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Host scan failed: {str(e)}")
+
+@app.post("/find-exploits", response_model=ExploitSearchResponse)
+async def find_exploits(request: ExploitSearchRequest):
+    """
+    Step 3: Find exploits for scanned services (matches __init__.py lines 79-86)
+    """
+    try:
+        target = request.host
+        enriched_results = request.scan_results
+        
+        print(f"💥 Finding exploits for: {target}")
+        
+        if not enriched_results:
+            raise HTTPException(status_code=400, detail="No scan results provided")
+        
+        # Run exploitation module (same as __init__.py line 82)
+        exploit_results = exploit_services(enriched_results)
+        print(f"✅ Exploitation analysis completed")
+        
+        # Collect all exploits from all services
         all_exploits = []
-        services_with_exploits = exploit_services(services)
+        for service in enriched_results:
+            exploits = service.get('exploits', [])
+            all_exploits.extend(exploits)
         
-        for service in services_with_exploits:
-            service_exploits = service.get('exploits', [])
-            all_exploits.extend(service_exploits)
-        
-        log_message(f"✅ Found {len(all_exploits)} total exploits")
-        
-        # Classify exploits
-        classification = classify_exploits(all_exploits)
-        
-        return {
-            "exploits": all_exploits,
-            "services": services_with_exploits,
-            "classification": {
-                "rce_count": len(classification.get('RCE', [])),
-                "dos_count": len(classification.get('DOS', [])),
-                "auth_bypass_count": len(classification.get('AUTH_BYPASS', [])),
-                "info_disclosure_count": len(classification.get('INFO_DISCLOSURE', [])),
-                "total_count": len(all_exploits)
-            },
-            "logs": get_logs()
+        # Create exploitation summary
+        exploitation_summary = {
+            "total_exploits": len(all_exploits),
+            "services_with_exploits": len([s for s in enriched_results if s.get('exploits')]),
+            "total_services": len(enriched_results)
         }
         
-    except Exception as e:
-        log_message(f"❌ Error during exploit discovery: {str(e)}")
-        raise HTTPException(status_code=500, detail="Exploit discovery failed.")
-
-@app.post("/execute-exploits")
-def execute_exploits(request: dict):
-    try:
-        selected_exploits = request.get("exploits", [])
-        host_data = request.get("host_data", {})
-        
-        if not selected_exploits:
-            raise HTTPException(status_code=400, detail="No exploits selected")
-        
-        log_message(f"🚀 Executing {len(selected_exploits)} exploits against {host_data.get('host')}")
-        
-        successful_exploits = []
-        for exploit in selected_exploits:
-            log_message(f"⚡ Attempting: {exploit.get('title', 'Unknown exploit')}")
-            # Simulate exploit execution
-            time.sleep(1)  # Simulate processing time
-            log_message(f"✅ Exploit completed")
-            successful_exploits.append(exploit)
-        
-        log_message(f"🎯 Exploit execution completed: {len(successful_exploits)}/{len(selected_exploits)} successful")
-        
-        return {
-            "message": "Exploit execution completed",
-            "successful_exploits": successful_exploits,
-            "total_attempts": len(selected_exploits),
-            "success_count": len(successful_exploits),
-            "logs": get_logs()
-        }
+        return ExploitSearchResponse(
+            host=target,
+            exploits=enriched_results,  # Contains services with their exploits
+            total_exploits=len(all_exploits),
+            exploitation_summary=exploitation_summary
+        )
         
     except Exception as e:
-        log_message(f"❌ Error during exploit execution: {str(e)}")
-        raise HTTPException(status_code=500, detail="Exploit execution failed.")
+        print(f"❌ Exploit search failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Exploit search failed: {str(e)}")
 
-@app.post("/msf-connect")
-async def connect_metasploit():
-    """Connect to Metasploit RPC API"""
+@app.post("/ai-recommendations", response_model=AIRecommendationResponse)
+async def get_ai_recommendations(request: AIRecommendationRequest):
+    """
+    Step 4: Generate AI Metasploit recommendations (matches __init__.py lines 148-221)
+    """
     try:
-        log_message("🔌 Connecting to Metasploit RPC...")
-        success = msf_connection.connect()
+        target = request.host
+        enriched_results = request.exploit_results
         
-        if success:
-            return {"status": "success", "message": "Connected to Metasploit"}
+        print(f"🤖 Generating AI Metasploit recommendations for: {target}")
+        
+        # Collect all exploits from all services (same as __init__.py lines 154-166)
+        all_exploits = []
+        for service in enriched_results:
+            exploits = service.get('exploits', [])
+            for exploit in exploits:
+                # Prepare exploit data for AI (same format as __init__.py lines 158-165)
+                exploit_data = {
+                    'host': target,
+                    'port': service.get('port'),
+                    'service': service.get('service'),
+                    'product': service.get('product', 'Unknown'),
+                    'version': service.get('version', 'Unknown'),
+                    'exploit_title': exploit.get('Title', ''),
+                    'exploit_description': exploit.get('Description', ''),
+                    'exploit_type': exploit.get('Type', ''),
+                    'exploit_platform': exploit.get('Platform', ''),
+                    'exploit_path': exploit.get('Path', ''),
+                    'cves': service.get('cves', [])
+                }
+                all_exploits.append((exploit, exploit_data))
+        
+        if not all_exploits:
+            raise HTTPException(status_code=404, detail="No exploits found to analyze")
+        
+        print(f"🎯 Processing {len(all_exploits)} exploits for AI analysis...")
+        
+        recommendations = []
+        for i, (exploit, exploit_data) in enumerate(all_exploits, 1):
+            print(f"📋 [{i}/{len(all_exploits)}] {exploit.get('Title', 'Unknown Exploit')}")
+            
+            # Get AI suggestion (same as __init__.py line 176)
+            ai_suggestion = find_metasploit_exploit(exploit_data)
+            
+            recommendation = AIRecommendation(
+                exploit=exploit,
+                ai_suggestion=ai_suggestion,
+                exploit_data=exploit_data
+            )
+            recommendations.append(recommendation)
+        
+        print(f"✅ Generated {len(recommendations)} AI recommendations")
+        
+        return AIRecommendationResponse(
+            host=target,
+            recommendations=recommendations,
+            total_recommendations=len(recommendations)
+        )
+        
+    except Exception as e:
+        print(f"❌ AI recommendations failed: {e}")
+        raise HTTPException(status_code=500, detail=f"AI recommendations failed: {str(e)}")
+
+@app.post("/open-metasploit")
+async def open_metasploit():
+    """
+    Step 5: Open Metasploit RPC terminal (matches __init__.py lines 88-147)
+    """
+    try:
+        print("⚡ Opening Metasploit terminal...")
+        
+        # Check if we're on Windows or Linux/WSL (same as __init__.py lines 93-94)
+        system = platform.system().lower()
+        
+        if system == "windows":
+            try:
+                # Windows command (same as __init__.py line 96)
+                os.system("start cmd /k python e:\\vulneramind_on_cursor\\vulneramind\\backend\\core\\msf_rpc_terminal.py")
+                return {"message": "✅ Metasploit terminal opened in new Windows terminal", "success": True}
+            except Exception as e:
+                print(f"❌ Failed to open Windows terminal: {e}")
+                raise HTTPException(status_code=500, detail=f"Failed to open Windows terminal: {str(e)}")
         else:
-            raise HTTPException(status_code=500, detail="Failed to connect to Metasploit")
-    except Exception as e:
-        log_message(f"❌ Error connecting to Metasploit: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.websocket("/ws/metasploit")
-async def websocket_metasploit(websocket: WebSocket):
-    """WebSocket endpoint for real-time Metasploit terminal"""
-    await websocket.accept()
-    log_message("🔌 Metasploit terminal connected")
-    
-    # Ensure connection
-    if not msf_connection.connected:
-        await websocket.send_text("Connecting to Metasploit...\n")
-        success = msf_connection.connect()
-        if not success:
-            await websocket.send_text("❌ Failed to connect to Metasploit RPC\n")
-            await websocket.close()
-            return
-        await websocket.send_text("✅ Connected to Metasploit RPC\n")
-        await websocket.send_text("msf6 > ")
-    
-    try:
-        while True:
-            # Wait for command from client
-            data = await websocket.receive_text()
-            command_data = json.loads(data)
-            command = command_data.get("input", "").strip()
+            # Linux/WSL approach (same as __init__.py lines 101-139)
+            terminal_opened = False
             
-            if command:
-                # Send command to Metasploit
-                log_message(f"Executing MSF command: {command}")
-                msf_connection.write_command(command)
-                
-                # Wait a bit for output
-                await asyncio.sleep(0.5)
-                
-                # Read and send output back
-                output = msf_connection.read_output()
-                if output:
-                    await websocket.send_text(output)
-                else:
-                    await websocket.send_text(f"Command executed: {command}\n")
-                
-                # Send prompt
-                await websocket.send_text("msf6 > ")
+            # Available terminal commands (same as __init__.py lines 105-111)
+            terminal_commands = [
+                ("gnome-terminal", "gnome-terminal -- python3 /mnt/e/vulneramind_on_cursor/vulneramind/backend/core/msf_rpc_terminal.py"),
+                ("xterm", "xterm -e python3 /mnt/e/vulneramind_on_cursor/vulneramind/backend/core/msf_rpc_terminal.py"),
+                ("konsole", "konsole -e python3 /mnt/e/vulneramind_on_cursor/vulneramind/backend/core/msf_rpc_terminal.py"),
+                ("terminator", "terminator -e python3 /mnt/e/vulneramind_on_cursor/vulneramind/backend/core/msf_rpc_terminal.py"),
+                ("x-terminal-emulator", "x-terminal-emulator -e python3 /mnt/e/vulneramind_on_cursor/vulneramind/backend/core/msf_rpc_terminal.py")
+            ]
             
-    except WebSocketDisconnect:
-        log_message("🔌 Metasploit terminal disconnected")
+            # Check which terminals are available (same as __init__.py lines 113-119)
+            available_terminals = []
+            for term_name, term_cmd in terminal_commands:
+                try:
+                    result = subprocess.run(["which", term_name], capture_output=True, text=True)
+                    if result.returncode == 0:
+                        available_terminals.append((term_name, term_cmd))
+                except:
+                    continue
+            
+            # Try to open with available terminals (same as __init__.py lines 121-131)
+            for term_name, term_cmd in available_terminals:
+                try:
+                    subprocess.Popen(term_cmd.split(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    return {"message": f"✅ Metasploit terminal opened using {term_name}", "success": True}
+                except Exception as e:
+                    print(f"❌ Failed to open {term_name}: {e}")
+                    continue
+            
+            # If no terminal worked (same as __init__.py lines 133-139)
+            if not terminal_opened:
+                error_msg = ("❌ Could not open terminal automatically. "
+                           "🔧 No suitable terminal emulator found. "
+                           "📋 Please run manually: cd /mnt/e/vulneramind_on_cursor/vulneramind/backend/core && python3 msf_rpc_terminal.py")
+                raise HTTPException(status_code=500, detail=error_msg)
+        
     except Exception as e:
-        log_message(f"❌ WebSocket error: {str(e)}")
-        await websocket.close()
-
-@app.get("/logs")
-def get_logs_endpoint():
-    return {"logs": get_logs()}
-
-@app.get("/logs/stream")
-async def stream_logs():
-    return StreamingResponse(stream_log_generator(), media_type="text/plain")
+        print(f"❌ Failed to open Metasploit: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to open Metasploit terminal: {str(e)}")
 
 if __name__ == "__main__":
+    print("🚀 Starting VulneraMind Scanner API Server...")
+    print("📋 Workflow: IP/Subnet -> Discover -> Scan -> Exploits -> AI -> Metasploit")
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
