@@ -1,11 +1,11 @@
 'use client';
 
-import VulneraMindWorkflow from '@/components/VulneraMindWorkflow';
+import EnhancedVulneraMindDashboard from '@/components/EnhancedVulneraMindDashboard';
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-gray-100">
-      <VulneraMindWorkflow />
+    <main>
+      <EnhancedVulneraMindDashboard />
     </main>
   );
 }
