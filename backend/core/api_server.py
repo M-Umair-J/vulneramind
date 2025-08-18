@@ -109,10 +109,12 @@ async def discover_hosts(request: HostDiscoveryRequest):
     Step 1: Discover live hosts from IP or subnet (matches __init__.py line 14)
     """
     try:
-        print(f"🔍 Discovering hosts for: {request.target}")
+        # Clean the target input by stripping whitespace
+        target = request.target.strip()
+        print(f"🔍 Discovering hosts for: {target}")
         
         # Use the same function as __init__.py
-        live_hosts = host_discovery.discover_live_hosts(request.target)
+        live_hosts = host_discovery.discover_live_hosts(target)
         
         if not live_hosts:
             raise HTTPException(status_code=404, detail="No live hosts found in the given range/subnet")
@@ -134,8 +136,9 @@ async def scan_host(request: HostScanRequest):
     Step 2: Scan selected host for services and CVEs (matches __init__.py lines 37-77)
     """
     try:
-        target = request.host
-        ports = request.ports
+        # Clean inputs by stripping whitespace
+        target = request.host.strip()
+        ports = request.ports.strip()
         
         print(f"🎯 Scanning host: {target} (ports: {ports})")
         
@@ -179,7 +182,7 @@ async def find_exploits(request: ExploitSearchRequest):
     Step 3: Find exploits for scanned services (matches __init__.py lines 79-86)
     """
     try:
-        target = request.host
+        target = request.host.strip()
         enriched_results = request.scan_results
         
         print(f"💥 Finding exploits for: {target}")
@@ -221,7 +224,7 @@ async def get_ai_recommendations(request: AIRecommendationRequest):
     Step 4: Generate AI Metasploit recommendations (matches __init__.py lines 148-221)
     """
     try:
-        target = request.host
+        target = request.host.strip()
         enriched_results = request.exploit_results
         
         print(f"🤖 Generating AI Metasploit recommendations for: {target}")
@@ -289,7 +292,7 @@ async def generate_vulnerability_report_endpoint(request: VulnerabilityReportReq
     Generate comprehensive AI vulnerability assessment report
     """
     try:
-        print(f"🤖 Generating vulnerability report for: {request.host}")
+        print(f"🤖 Generating vulnerability report for: {request.host.strip()}")
         
         # Import the report generator
         sys.path.insert(0, os.path.join(current_dir, '..', 'ai', 'reporting'))
@@ -297,7 +300,7 @@ async def generate_vulnerability_report_endpoint(request: VulnerabilityReportReq
         
         # Generate the comprehensive report
         report = generate_vulnerability_report(
-            target_host=request.host,
+            target_host=request.host.strip(),
             scan_results=request.scan_results,
             exploit_results=request.exploit_results or [],
             ai_recommendations=request.ai_recommendations or []
@@ -308,11 +311,11 @@ async def generate_vulnerability_report_endpoint(request: VulnerabilityReportReq
         generator = VulnerabilityReportGenerator()
         markdown_report = generator.format_as_markdown(report)
         
-        print(f"✅ Report generated successfully for {request.host}")
+        print(f"✅ Report generated successfully for {request.host.strip()}")
         
         return {
             "success": True,
-            "message": f"Vulnerability report generated for {request.host}",
+            "message": f"Vulnerability report generated for {request.host.strip()}",
             "report": report,
             "markdown": markdown_report,
             "metadata": {

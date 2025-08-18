@@ -73,7 +73,8 @@ export default function VulneraMindWorkflow() {
 
   // Step 1: Discover hosts or scan single IP
   const handleTargetSubmit = async () => {
-    if (!state.target.trim()) {
+    const trimmedTarget = state.target.trim();
+    if (!trimmedTarget) {
       setError('Please enter an IP address or subnet');
       return;
     }
@@ -83,16 +84,16 @@ export default function VulneraMindWorkflow() {
 
     try {
       // Check if it's a single IP or subnet
-      const isSingleIP = !state.target.includes('/') && !state.target.includes('-');
+      const isSingleIP = !trimmedTarget.includes('/') && !trimmedTarget.includes('-');
       
       if (isSingleIP) {
         // Single IP - go directly to scanning
-        setState(prev => ({ ...prev, selectedHost: state.target, step: 'scan' }));
-        await scanHost(state.target);
+        setState(prev => ({ ...prev, selectedHost: trimmedTarget, step: 'scan' }));
+        await scanHost(trimmedTarget);
       } else {
         // Subnet - discover hosts first
-        console.log('🔍 Discovering hosts in:', state.target);
-        const response = await apiCall('/discover-hosts', { target: state.target });
+        console.log('🔍 Discovering hosts in:', trimmedTarget);
+        const response = await apiCall('/discover-hosts', { target: trimmedTarget });
         
         setState(prev => ({ 
           ...prev, 
