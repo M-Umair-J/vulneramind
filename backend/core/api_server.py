@@ -250,17 +250,16 @@ async def get_ai_recommendations(request: AIRecommendationRequest):
         if not all_exploits:
             raise HTTPException(status_code=404, detail="No exploits found to analyze")
         
-        # Limit to top 20 exploits to respect API quotas
-        max_exploits = 20
-        if len(all_exploits) > max_exploits:
-            print(f"⚠️ Limiting AI analysis to top {max_exploits} exploits (quota management)")
-            all_exploits = all_exploits[:max_exploits]
-        
-        print(f"🎯 Processing {len(all_exploits)} exploits for AI analysis...")
+        # With local AI, we can process all exploits without quota limits!
+        print(f"🎯 Processing ALL {len(all_exploits)} exploits with local AI...")
         
         recommendations = []
+        total_exploits = len(all_exploits)
+        
         for i, (exploit, exploit_data) in enumerate(all_exploits, 1):
-            print(f"📋 [{i}/{len(all_exploits)}] {exploit.get('Title', 'Unknown Exploit')}")
+            # Log progress every 10 exploits instead of every single one
+            if i % 10 == 0 or i == 1 or i == total_exploits:
+                print(f"📋 Processing exploits: {i}/{total_exploits} ({(i/total_exploits)*100:.1f}%)")
             
             # Get AI suggestion (same as __init__.py line 176)
             ai_suggestion = find_metasploit_exploit(exploit_data)
