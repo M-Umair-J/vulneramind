@@ -361,7 +361,7 @@ Write actionable remediation steps organized by priority (Immediate, Short-term,
                 model=self.report_model,
                 messages=[{
                     'role': 'system', 
-                    'content': 'You are a professional cybersecurity consultant writing formal assessment reports. Write in clear, professional business language without amateur formatting like stars.'
+                    'content': 'You are a professional cybersecurity consultant writing formal assessment reports. Write in clear, professional business language. Use proper English paragraphs without asterisks (*), stars, or amateur markdown formatting. Use only clean, professional prose.'
                 }, {
                     'role': 'user', 
                     'content': prompts[section_type]
@@ -374,6 +374,12 @@ Write actionable remediation steps organized by priority (Immediate, Short-term,
             )
             
             content = response['message']['content'].strip()
+            
+            # Clean up any remaining amateur formatting
+            content = content.replace('*', '')  # Remove any asterisks
+            content = re.sub(r'\*+', '', content)  # Remove multiple asterisks
+            content = re.sub(r'\n\s*\n\s*\n', '\n\n', content)  # Clean up extra newlines
+            
             return content
             
         except Exception as e:

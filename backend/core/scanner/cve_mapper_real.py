@@ -188,7 +188,7 @@ class CVEMapper:
                     for db_cve in db_cves[:10]:  # Limit to top 10 CVEs
                         cve = {
                             'id': db_cve['cve_id'],
-                            'description': db_cve['description'][:200] + '...' if len(db_cve['description']) > 200 else db_cve['description'],
+                            'description': db_cve['description'],  # Show full description
                             'severity': db_cve['severity'] or 'UNKNOWN',
                             'score': db_cve['score'] or 0.0
                         }
@@ -265,7 +265,7 @@ class CVEMapper:
                 for row in db_results:
                     cve = {
                         'id': row['cve_id'],
-                        'description': row['description'][:200] + '...' if len(row['description']) > 200 else row['description'],
+                        'description': row['description'],  # Show full description
                         'severity': row['severity'] or 'UNKNOWN',
                         'score': row['score'] or 0.0
                     }

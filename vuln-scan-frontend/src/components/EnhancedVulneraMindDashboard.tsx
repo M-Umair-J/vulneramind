@@ -1023,6 +1023,30 @@ export default function EnhancedVulneraMindDashboard() {
                         
                         <button
                           onClick={() => {
+                            if (!state.generatedReport?.html) {
+                              alert('HTML report not available');
+                              return;
+                            }
+                            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('.')[0];
+                            const baseFilename = `VulneraMind_Report_${state.selectedHost}_${timestamp}`;
+                            const blob = new Blob([state.generatedReport.html], { type: 'text/html' });
+                            const url = URL.createObjectURL(blob);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = `${baseFilename}.html`;
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            URL.revokeObjectURL(url);
+                          }}
+                          className="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 font-medium transition-all duration-200 flex items-center space-x-2"
+                        >
+                          <span>🎨</span>
+                          <span>Download HTML</span>
+                        </button>
+                        
+                        <button
+                          onClick={() => {
                             const reportWindow = window.open('', '_blank');
                             if (reportWindow) {
                               reportWindow.document.write(`
@@ -1071,9 +1095,9 @@ export default function EnhancedVulneraMindDashboard() {
                         
                         <div className="bg-black/30 p-4 rounded">
                           <h5 className="font-semibold text-gray-300 mb-2">Executive Summary Preview</h5>
-                          <p className="text-sm text-gray-400">
-                            {state.generatedReport.report?.executive_summary?.substring(0, 300) || 'No summary available'}...
-                          </p>
+                          <div className="text-sm text-gray-400 max-h-96 overflow-y-auto">
+                            {state.generatedReport.report?.executive_summary || 'No summary available'}
+                          </div>
                         </div>
                       </div>
                     </div>
