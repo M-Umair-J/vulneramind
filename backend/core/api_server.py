@@ -311,6 +311,38 @@ async def generate_vulnerability_report_endpoint(request: VulnerabilityReportReq
         generator = VulnerabilityReportGenerator()
         markdown_report = generator.format_as_markdown(report)
         
+        # Convert markdown to HTML for download
+        html_report = f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>VulneraMind Report - {request.host.strip()}</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; background: #f8f9fa; }}
+        .report-container {{ background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+        h1, h2, h3 {{ color: #1f2937; }}
+        h1 {{ border-bottom: 3px solid #3b82f6; padding-bottom: 10px; }}
+        h2 {{ border-bottom: 1px solid #e5e7eb; padding-bottom: 5px; }}
+        .metadata {{ background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0; }}
+        .critical {{ color: #dc2626; font-weight: bold; }}
+        .high {{ color: #ea580c; font-weight: bold; }}
+        .medium {{ color: #d97706; font-weight: bold; }}
+        .low {{ color: #16a34a; font-weight: bold; }}
+        pre {{ background: #f8fafc; padding: 15px; border-radius: 8px; overflow-x: auto; border-left: 4px solid #3b82f6; }}
+        code {{ background: #e5e7eb; padding: 2px 6px; border-radius: 4px; }}
+        table {{ border-collapse: collapse; width: 100%; margin: 15px 0; }}
+        th, td {{ border: 1px solid #e5e7eb; padding: 12px; text-align: left; }}
+        th {{ background: #f8fafc; font-weight: bold; }}
+        .vulnerability {{ background: #fef2f2; border-left: 4px solid #dc2626; padding: 10px; margin: 10px 0; }}
+        .recommendation {{ background: #f0f9ff; border-left: 4px solid #3b82f6; padding: 10px; margin: 10px 0; }}
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        <pre>{markdown_report}</pre>
+    </div>
+</body>
+</html>"""
+        
         print(f"✅ Report generated successfully for {request.host.strip()}")
         
         return {
@@ -318,6 +350,7 @@ async def generate_vulnerability_report_endpoint(request: VulnerabilityReportReq
             "message": f"Vulnerability report generated for {request.host.strip()}",
             "report": report,
             "markdown": markdown_report,
+            "html": html_report,
             "metadata": {
                 "total_vulnerabilities": sum(len(service.get('cves', [])) for service in request.scan_results),
                 "total_services": len(request.scan_results),
