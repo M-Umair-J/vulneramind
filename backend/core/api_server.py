@@ -318,6 +318,8 @@ async def generate_vulnerability_report_endpoint(request: VulnerabilityReportReq
         )
         
         # Convert to markdown format
+        from pathlib import Path
+        sys.path.append(str(Path(__file__).parent.parent / 'ai' / 'reporting'))
         from vulnerability_report_generator import VulnerabilityReportGenerator
         generator = VulnerabilityReportGenerator()
         markdown_report = generator.format_as_markdown(report)
