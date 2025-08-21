@@ -303,6 +303,42 @@ export default function EnhancedVulneraMindDashboard() {
       addLog('success', '📁 Markdown report downloaded successfully', 'system');
     } else if (format === 'pdf') {
       // Convert markdown to PDF using browser's print functionality
+      
+      // Function to properly convert markdown to HTML
+      const convertMarkdownToHtml = (markdown: string) => {
+        let html = markdown;
+        
+        // Convert headers
+        html = html.replace(/^# (.*?)$/gm, '<h1>$1</h1>');
+        html = html.replace(/^## (.*?)$/gm, '<h2>$1</h2>');
+        html = html.replace(/^### (.*?)$/gm, '<h3>$1</h3>');
+        
+        // Convert bold text **text** to <strong>text</strong>
+        html = html.replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>');
+        
+        // Convert bullet points
+        html = html.replace(/^- (.*?)$/gm, '<li>$1</li>');
+        
+        // Wrap li elements in ul tags
+        html = html.replace(/(<li>.*?<\/li>\s*)+/g, match => `<ul>${match}</ul>`);
+        
+        // Convert line breaks to proper HTML
+        html = html.replace(/\n\n/g, '</p><p>');
+        html = '<p>' + html + '</p>';
+        
+        // Clean up formatting
+        html = html.replace(/<p><\/p>/g, '');
+        html = html.replace(/<p>(<h[123]>)/g, '$1');
+        html = html.replace(/(<\/h[123]>)<\/p>/g, '$1');
+        html = html.replace(/<p>(<ul>)/g, '$1');
+        html = html.replace(/(<\/ul>)<\/p>/g, '$1');
+        html = html.replace(/\n/g, '<br>');
+        
+        return html;
+      };
+      
+      const htmlContent = convertMarkdownToHtml(state.generatedReport.markdown);
+      
       const reportWindow = window.open('', '_blank');
       if (reportWindow) {
         reportWindow.document.write(`
@@ -322,11 +358,44 @@ export default function EnhancedVulneraMindDashboard() {
                   background: white; 
                   color: #333; 
                   line-height: 1.6;
+                  font-size: 14px; /* Normal text size */
                 }
-                h1, h2, h3 { color: #8b5cf6; border-bottom: 2px solid #8b5cf6; padding-bottom: 5px; }
-                h1 { font-size: 2.5em; text-align: center; }
-                h2 { font-size: 2em; margin-top: 30px; }
-                h3 { font-size: 1.5em; margin-top: 25px; }
+                /* Only titles should be big and bold */
+                h1 { 
+                  color: #8b5cf6; 
+                  border-bottom: 2px solid #8b5cf6; 
+                  padding-bottom: 5px; 
+                  font-size: 1.8em; /* Bigger for main title */
+                  font-weight: bold; 
+                  text-align: center; 
+                }
+                h2 { 
+                  color: #8b5cf6; 
+                  border-bottom: 1px solid #8b5cf6; 
+                  padding-bottom: 3px; 
+                  font-size: 1.4em; /* Medium for section headers */
+                  font-weight: bold; 
+                  margin-top: 30px; 
+                }
+                h3 { 
+                  color: #8b5cf6; 
+                  font-size: 1.2em; /* Slightly bigger for sub-sections */
+                  font-weight: bold; 
+                  margin-top: 25px; 
+                }
+                /* Strong text (CVE titles) should be bold but normal size */
+                strong { 
+                  font-weight: bold; 
+                  color: #333; 
+                  font-size: inherit; /* Same size as normal text */
+                }
+                p { 
+                  margin: 10px 0; 
+                  font-size: 14px; /* Normal text size */
+                }
+                ul, li { 
+                  font-size: 14px; /* Normal text size */
+                }
                 .metadata { 
                   background: #f8f9fa; 
                   padding: 15px; 
@@ -397,7 +466,7 @@ export default function EnhancedVulneraMindDashboard() {
                 <button class="print-btn" onclick="window.print()">🖨️ Save as PDF</button>
                 <button class="print-btn" onclick="window.close()">❌ Close</button>
               </div>
-              <div style="white-space: pre-wrap; font-family: inherit;">${state.generatedReport.markdown.replace(/\n/g, '<br>')}</div>
+              <div>${htmlContent}</div>
             </body>
           </html>
         `);

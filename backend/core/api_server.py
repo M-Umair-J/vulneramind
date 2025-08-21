@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Any
+from datetime import datetime
 import os
 import sys
 import platform
@@ -251,7 +252,17 @@ async def get_ai_recommendations(request: AIRecommendationRequest):
                 all_exploits.append((exploit, exploit_data))
         
         if not all_exploits:
-            raise HTTPException(status_code=404, detail="No exploits found to analyze")
+            print("⚠️ No exploits found for AI analysis")
+            return {
+                "success": True,
+                "message": "No exploits found for the scanned services",
+                "recommendations": [],
+                "metadata": {
+                    "total_exploits_analyzed": 0,
+                    "recommendations_generated": 0,
+                    "analysis_status": "No exploits available for analysis"
+                }
+            }
         
         # With local AI, we can process all exploits without quota limits!
         print(f"🎯 Processing ALL {len(all_exploits)} exploits with local AI...")
@@ -311,34 +322,379 @@ async def generate_vulnerability_report_endpoint(request: VulnerabilityReportReq
         generator = VulnerabilityReportGenerator()
         markdown_report = generator.format_as_markdown(report)
         
-        # Convert markdown to HTML for download
+        # Convert markdown to properly formatted HTML
+        def markdown_to_html(markdown_text):
+            # Replace markdown formatting with proper HTML
+            html_text = markdown_text
+            
+            # Convert headers
+            html_text = html_text.replace('# ', '<h1>').replace('\n# ', '</h1>\n<h1>')
+            html_text = html_text.replace('## ', '<h2>').replace('\n## ', '</h2>\n<h2>')
+            html_text = html_text.replace('### ', '<h3>').replace('\n### ', '</h3>\n<h3>')
+            
+            # Convert bold text **text** to <strong>text</strong>
+            import re
+            html_text = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', html_text)
+            
+            # Convert bullet points
+            html_text = re.sub(r'^- (.*?)$', r'<li>\1</li>', html_text, flags=re.MULTILINE)
+            html_text = re.sub(r'(<li>.*?</li>)', r'<ul>\1</ul>', html_text, flags=re.DOTALL)
+            
+            # Convert line breaks to proper paragraphs
+            paragraphs = html_text.split('\n\n')
+            formatted_paragraphs = []
+            for para in paragraphs:
+                para = para.strip()
+                if para and not para.startswith('<'):
+                    para = f'<p>{para}</p>'
+                formatted_paragraphs.append(para)
+            
+            html_text = '\n'.join(formatted_paragraphs)
+            
+            # Close any open headers
+            html_text = html_text.replace('</h1>\n<h1>', '</h1>\n').replace('</h2>\n<h2>', '</h2>\n').replace('</h3>\n<h3>', '</h3>\n')
+            if '<h1>' in html_text and '</h1>' not in html_text:
+                html_text += '</h1>'
+            if '<h2>' in html_text and html_text.count('<h2>') > html_text.count('</h2>'):
+                html_text += '</h2>'
+            if '<h3>' in html_text and html_text.count('<h3>') > html_text.count('</h3>'):
+                html_text += '</h3>'
+                
+            return html_text
+        
+        formatted_html_content = markdown_to_html(markdown_report)
+        
+        # Convert markdown to HTML for download with professional styling
         html_report = f"""<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>VulneraMind Report - {request.host.strip()}</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VulneraMind Security Assessment Report - {request.host.strip()}</title>
     <style>
-        body {{ font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; background: #f8f9fa; }}
-        .report-container {{ background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
-        h1, h2, h3 {{ color: #1f2937; }}
-        h1 {{ border-bottom: 3px solid #3b82f6; padding-bottom: 10px; }}
-        h2 {{ border-bottom: 1px solid #e5e7eb; padding-bottom: 5px; }}
-        .metadata {{ background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0; }}
-        .critical {{ color: #dc2626; font-weight: bold; }}
-        .high {{ color: #ea580c; font-weight: bold; }}
-        .medium {{ color: #d97706; font-weight: bold; }}
-        .low {{ color: #16a34a; font-weight: bold; }}
-        pre {{ background: #f8fafc; padding: 15px; border-radius: 8px; overflow-x: auto; border-left: 4px solid #3b82f6; }}
-        code {{ background: #e5e7eb; padding: 2px 6px; border-radius: 4px; }}
-        table {{ border-collapse: collapse; width: 100%; margin: 15px 0; }}
-        th, td {{ border: 1px solid #e5e7eb; padding: 12px; text-align: left; }}
-        th {{ background: #f8fafc; font-weight: bold; }}
-        .vulnerability {{ background: #fef2f2; border-left: 4px solid #dc2626; padding: 10px; margin: 10px 0; }}
-        .recommendation {{ background: #f0f9ff; border-left: 4px solid #3b82f6; padding: 10px; margin: 10px 0; }}
+        /* Import professional fonts */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+        :root {{
+            --primary-color: #1e40af;
+            --primary-light: #3b82f6;
+            --accent-color: #dc2626;
+            --warning-color: #ea580c;
+            --success-color: #16a34a;
+            --background-color: #f8fafc;
+            --surface-color: #ffffff;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --border-color: #e2e8f0;
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            --border-radius: 8px;
+            --spacing-md: 1rem;
+            --spacing-lg: 1.5rem;
+            --spacing-xl: 2rem;
+        }}
+
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+
+        body {{
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: var(--text-primary);
+            background: var(--background-color);
+            font-size: 14px;
+        }}
+
+        .report-container {{
+            max-width: 8.5in;
+            margin: 0 auto;
+            background: var(--surface-color);
+            box-shadow: var(--shadow-lg);
+            border-radius: var(--border-radius);
+            overflow: hidden;
+        }}
+
+        .classification-banner {{
+            background: linear-gradient(135deg, var(--accent-color), #b91c1c);
+            color: white;
+            text-align: center;
+            padding: 8px 16px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-size: 12px;
+        }}
+
+        .report-header {{
+            background: linear-gradient(135deg, var(--primary-color), #0891b2);
+            color: white;
+            padding: var(--spacing-xl);
+            text-align: center;
+            position: relative;
+        }}
+
+        .report-header::before {{
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="0.5"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)" /></svg>');
+            opacity: 0.3;
+        }}
+
+        .logo-container {{
+            margin-bottom: var(--spacing-lg);
+            position: relative;
+            z-index: 2;
+        }}
+
+        .logo-text {{
+            font-size: 2rem;
+            font-weight: 800;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }}
+
+        .report-title {{
+            font-size: 1.8em;
+            font-weight: 800;
+            margin-bottom: 8px;
+            position: relative;
+            z-index: 2;
+        }}
+
+        .report-subtitle {{
+            font-size: 1.1em;
+            opacity: 0.9;
+            font-weight: 300;
+            position: relative;
+            z-index: 2;
+        }}
+
+        .report-content {{
+            padding: var(--spacing-xl);
+        }}
+
+        .section {{
+            margin-bottom: var(--spacing-xl);
+            page-break-inside: avoid;
+        }}
+
+        .section-header {{
+            display: flex;
+            align-items: center;
+            margin-bottom: var(--spacing-lg);
+            padding-bottom: 8px;
+            border-bottom: 2px solid var(--border-color);
+        }}
+
+        .section-title {{
+            color: var(--primary-color);
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin: 0;
+        }}
+
+        .executive-summary {{
+            background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+            border-radius: var(--border-radius);
+            padding: var(--spacing-xl);
+            margin-bottom: var(--spacing-xl);
+            border: 1px solid var(--border-color);
+        }}
+
+        .metrics-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: var(--spacing-lg);
+            margin: var(--spacing-xl) 0;
+        }}
+
+        .metric-card {{
+            background: var(--surface-color);
+            padding: var(--spacing-lg);
+            border-radius: var(--border-radius);
+            border: 1px solid var(--border-color);
+            text-align: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }}
+
+        .metric-value {{
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: var(--primary-color);
+            line-height: 1;
+        }}
+
+        .metric-label {{
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-top: 4px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.025em;
+        }}
+
+        .vulnerability-card {{
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            padding: var(--spacing-lg);
+            margin: var(--spacing-md) 0;
+            position: relative;
+            border-left: 4px solid var(--accent-color);
+        }}
+
+        .vulnerability-header {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }}
+
+        .cve-id {{
+            font-weight: 700;
+            font-size: 1.1rem;
+            color: var(--primary-color);
+            font-family: 'JetBrains Mono', monospace;
+        }}
+
+        .cvss-score {{
+            background: var(--accent-color);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: 700;
+            font-size: 0.875rem;
+            font-family: 'JetBrains Mono', monospace;
+        }}
+
+        .service-info {{
+            background: #f1f5f9;
+            padding: var(--spacing-md);
+            border-radius: 4px;
+            margin: 8px 0;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.875rem;
+        }}
+
+        .severity-critical {{ border-left-color: #dc2626; }}
+        .severity-high {{ border-left-color: #ea580c; }}
+        .severity-medium {{ border-left-color: #d97706; }}
+        .severity-low {{ border-left-color: #16a34a; }}
+
+        .risk-indicator {{
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 12px;
+            border-radius: 9999px;
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+            white-space: nowrap;
+        }}
+
+        .risk-critical {{ background: #dc2626; color: white; }}
+        .risk-high {{ background: #ea580c; color: white; }}
+        .risk-medium {{ background: #d97706; color: white; }}
+        .risk-low {{ background: #16a34a; color: white; }}
+
+        .code-block {{
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: var(--spacing-md);
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.875rem;
+            overflow-x: auto;
+            margin: var(--spacing-md) 0;
+            border-left: 4px solid var(--primary-color);
+        }}
+
+        .report-footer {{
+            background: #1e293b;
+            color: white;
+            padding: var(--spacing-xl);
+            text-align: center;
+            margin-top: var(--spacing-xl);
+        }}
+
+        .footer-text {{
+            font-size: 0.875rem;
+            opacity: 0.8;
+            margin: 4px 0;
+        }}
+
+        h1, h2, h3 {{ color: var(--primary-color); margin: var(--spacing-lg) 0 var(--spacing-md) 0; }}
+        h1 {{ font-size: 1.8em; border-bottom: 2px solid var(--primary-color); padding-bottom: 8px; }}
+        h2 {{ font-size: 1.4em; }}
+        h3 {{ font-size: 1.2em; }}
+
+        strong {{ color: var(--text-primary); }}
+        em {{ color: var(--text-secondary); font-style: italic; }}
+
+        pre {{
+            background: #f8fafc;
+            padding: var(--spacing-md);
+            border-radius: var(--border-radius);
+            border-left: 4px solid var(--primary-color);
+            overflow-x: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.875rem;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }}
+
+        @media print {{
+            .report-container {{ box-shadow: none; max-width: none; border-radius: 0; }}
+            .section {{ page-break-inside: avoid; }}
+        }}
     </style>
 </head>
 <body>
     <div class="report-container">
-        <pre>{markdown_report}</pre>
+        <!-- Classification Banner -->
+        <div class="classification-banner">
+            🔒 CONFIDENTIAL - VULNERABILITY ASSESSMENT REPORT
+        </div>
+
+        <!-- Header -->
+        <div class="report-header">
+            <div class="logo-container">
+                <div class="logo-text">
+                    🛡️ VulneraMind Security
+                </div>
+            </div>
+            <h1 class="report-title">Vulnerability Assessment Report</h1>
+            <div class="report-subtitle">
+                Target: {request.host.strip()} | Generated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}
+            </div>
+        </div>
+
+        <!-- Content -->
+        <div class="report-content">
+            {formatted_html_content}
+        </div>
+
+        <!-- Footer -->
+        <div class="report-footer">
+            <div class="footer-text">
+                <strong>🛡️ VulneraMind Security Platform</strong>
+            </div>
+            <div class="footer-text">
+                Powered by AI-Driven Vulnerability Assessment Technology
+            </div>
+            <div class="footer-text">
+                Report Classification: CONFIDENTIAL | Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}
+            </div>
+            <div class="footer-text" style="margin-top: 16px; opacity: 0.6;">
+                This report contains sensitive security information and should be handled according to your organization's data classification policies.
+            </div>
+        </div>
     </div>
 </body>
 </html>"""

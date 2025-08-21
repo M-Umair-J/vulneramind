@@ -529,44 +529,60 @@ export default function VulneraMindWorkflow() {
       )}
 
       {/* Step 4: Exploit Results */}
-      {state.step === 'exploits' && state.exploitResults.length > 0 && (
+      {state.step === 'exploits' && (
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
           <h2 className="text-xl font-bold mb-4">
             💥 Exploit Analysis for {state.selectedHost}
           </h2>
           
-          <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
-            {state.exploitResults.map((service, serviceIndex) => (
-              service.exploits && service.exploits.length > 0 && (
-                <div key={serviceIndex} className="border border-gray-200 rounded-lg p-4">
-                  <h3 className="font-bold text-gray-800 mb-2">
-                    Port {service.port}: {service.service} - {service.exploits.length} exploits found
-                  </h3>
-                  <div className="space-y-2">
-                    {service.exploits.slice(0, 3).map((exploit: any, exploitIndex: number) => (
-                      <div key={exploitIndex} className="bg-gray-50 p-3 rounded">
-                        <h4 className="font-medium text-gray-800">{exploit.Title}</h4>
-                        <p className="text-sm text-gray-600 mt-1">{exploit.Description}</p>
-                        <div className="flex gap-2 mt-2">
-                          <span className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded">
-                            {exploit.Platform}
-                          </span>
-                          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
-                            {exploit.Type}
-                          </span>
+          {state.exploitResults.length > 0 ? (
+            <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
+              {state.exploitResults.map((service, serviceIndex) => (
+                service.exploits && service.exploits.length > 0 && (
+                  <div key={serviceIndex} className="border border-gray-200 rounded-lg p-4">
+                    <h3 className="font-bold text-gray-800 mb-2">
+                      Port {service.port}: {service.service} - {service.exploits.length} exploits found
+                    </h3>
+                    <div className="space-y-2">
+                      {service.exploits.slice(0, 3).map((exploit: any, exploitIndex: number) => (
+                        <div key={exploitIndex} className="bg-gray-50 p-3 rounded">
+                          <h4 className="font-medium text-gray-800">{exploit.Title}</h4>
+                          <p className="text-sm text-gray-600 mt-1">{exploit.Description}</p>
+                          <div className="flex gap-2 mt-2">
+                            <span className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded">
+                              {exploit.Platform}
+                            </span>
+                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                              {exploit.Type}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                    {service.exploits.length > 3 && (
-                      <div className="text-sm text-gray-500">
-                        ... and {service.exploits.length - 3} more exploits
-                      </div>
-                    )}
+                      ))}
+                      {service.exploits.length > 3 && (
+                        <div className="text-sm text-gray-500">
+                          ... and {service.exploits.length - 3} more exploits
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )
-            ))}
-          </div>
+                )
+              ))}
+            </div>
+          ) : (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-6 mb-6 text-center">
+              <div className="text-green-600 text-2xl mb-2">🛡️</div>
+              <h3 className="text-lg font-semibold text-green-800 mb-2">No Exploits Found</h3>
+              <p className="text-green-700">
+                Great news! No known exploits were found for the detected services on this host. 
+                This indicates a relatively secure configuration.
+              </p>
+              <div className="mt-4 text-sm text-green-600">
+                • All detected services appear to be secure<br/>
+                • No publicly available exploits match the detected versions<br/>
+                • Consider this a positive security indicator
+              </div>
+            </div>
+          )}
           
           <div className="flex gap-4">
             <button
@@ -587,46 +603,47 @@ export default function VulneraMindWorkflow() {
       )}
 
       {/* Step 5: AI Recommendations */}
-      {state.step === 'ai' && state.aiRecommendations.length > 0 && (
+      {state.step === 'ai' && (
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
           <h2 className="text-xl font-bold mb-4">
-            🤖 AI Metasploit Recommendations for {state.selectedHost} ({state.aiRecommendations.length})
+            🤖 AI Metasploit Recommendations for {state.selectedHost}
           </h2>
           
-          <div className="space-y-6 mb-6 max-h-96 overflow-y-auto">
-            {state.aiRecommendations.map((rec, index) => (
-              <div key={index} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-                <h3 className="font-bold text-lg text-gray-800 mb-2">
-                  {rec.exploit.Title}
-                </h3>
-                <p className="text-sm text-gray-600 mb-3">{rec.exploit.Description}</p>
-                
-                {rec.ai_suggestion.error ? (
-                  <div className="p-3 bg-red-100 text-red-700 rounded">
-                    ❌ {rec.ai_suggestion.error}
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="bg-blue-50 p-3 rounded">
-                        <span className="font-semibold text-blue-800">Module:</span>
-                        <code className="block mt-1 text-sm bg-white p-2 rounded">
-                          {rec.ai_suggestion.exploit_module}
-                        </code>
-                      </div>
-                      <div className="bg-green-50 p-3 rounded">
-                        <span className="font-semibold text-green-800">Payload:</span>
-                        <code className="block mt-1 text-sm bg-white p-2 rounded">
-                          {rec.ai_suggestion.payload}
-                        </code>
-                      </div>
+          {state.aiRecommendations.length > 0 ? (
+            <div className="space-y-6 mb-6 max-h-96 overflow-y-auto">
+              {state.aiRecommendations.map((rec, index) => (
+                <div key={index} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                  <h3 className="font-bold text-lg text-gray-800 mb-2">
+                    {rec.exploit.Title}
+                  </h3>
+                  <p className="text-sm text-gray-600 mb-3">{rec.exploit.Description}</p>
+                  
+                  {rec.ai_suggestion.error ? (
+                    <div className="p-3 bg-red-100 text-red-700 rounded">
+                      ❌ {rec.ai_suggestion.error}
                     </div>
-                    
-                    {rec.ai_suggestion.commands && (
-                      <div className="bg-gray-100 p-3 rounded">
-                        <span className="font-semibold text-gray-800">Commands:</span>
-                        <div className="mt-2 bg-black text-green-400 p-3 rounded font-mono text-sm">
-                          {rec.ai_suggestion.commands.map((cmd: string, cmdIndex: number) => (
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="bg-blue-50 p-3 rounded">
+                          <span className="font-semibold text-blue-800">Module:</span>
+                          <code className="block mt-1 text-sm bg-white p-2 rounded">
+                            {rec.ai_suggestion.exploit_module}
+                          </code>
+                        </div>
+                        <div className="bg-green-50 p-3 rounded">
+                          <span className="font-semibold text-green-800">Payload:</span>
+                          <code className="block mt-1 text-sm bg-white p-2 rounded">
+                            {rec.ai_suggestion.payload}
+                          </code>
+                        </div>
+                      </div>
+                      
+                      {rec.ai_suggestion.commands && (
+                        <div className="bg-gray-100 p-3 rounded">
+                          <span className="font-semibold text-gray-800">Commands:</span>
+                          <div className="mt-2 bg-black text-green-400 p-3 rounded font-mono text-sm">
+                            {rec.ai_suggestion.commands.map((cmd: string, cmdIndex: number) => (
                             <div key={cmdIndex} className="mb-1">
                               <span className="text-green-600">msf6 &gt;</span> {cmd}
                             </div>
@@ -639,6 +656,21 @@ export default function VulneraMindWorkflow() {
               </div>
             ))}
           </div>
+          ) : (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6 text-center">
+              <div className="text-blue-600 text-2xl mb-2">🤖</div>
+              <h3 className="text-lg font-semibold text-blue-800 mb-2">No AI Recommendations Available</h3>
+              <p className="text-blue-700 mb-4">
+                No exploits were found for the scanned services, so there are no specific Metasploit 
+                recommendations to generate.
+              </p>
+              <div className="text-sm text-blue-600">
+                • No exploitable vulnerabilities detected<br/>
+                • AI analysis requires exploits to generate recommendations<br/>
+                • This is actually a positive security indicator
+              </div>
+            </div>
+          )}
           
           <div className="flex gap-4">
             <button
